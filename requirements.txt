@@ -1,0 +1,2 @@
+# Core dependencies for Android resources processing
+lxml>=4.9.0
