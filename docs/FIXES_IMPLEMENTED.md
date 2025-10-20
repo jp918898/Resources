@@ -12,7 +12,7 @@
 
 **总计**:
 - ✅ 修复缺陷: 10项
-- ✅ 新增功能: 5项
+- ✅ 新增功能: 8项
 - ✅ 性能优化: 4项
 - ✅ 代码质量提升: 6项
 
@@ -721,6 +721,128 @@ public String getStatistics() {
 
 ---
 
+### 功能 #6: 自动对齐和签名集成
+
+**描述**: 新增 `--auto-sign`/`--no-auto-sign` CLI参数，集成zipalign和apksigner工具，实现一键处理APK。
+
+**实现日期**: 2025-10-20
+
+**实现细节**:
+
+1. **新增工具类**:
+   - `ZipAlignUtil.java`: 封装zipalign.exe调用
+   - `ApkSignerUtil.java`: 封装apksigner.bat调用
+
+2. **ResourceConfig扩展**:
+```java
+private final boolean autoSign;  // 默认true
+
+public boolean isAutoSign() { 
+    return autoSign; 
+}
+
+public Builder autoSign(boolean value) {
+    this.autoSign = value;
+    return this;
+}
+```
+
+3. **CLI参数**:
+```java
+@Option(names = {"--auto-sign"}, 
+        negatable = true,
+        description = "启用/禁用自动对齐和签名（默认: --auto-sign）")
+private Boolean autoSign = null;
+```
+
+4. **ResourceProcessor条件执行**:
+```java
+if (config.isAutoSign()) {
+    performAlignAndSign(tempApkPath, apkPath);
+} else {
+    Files.move(Paths.get(tempApkPath), Paths.get(apkPath), REPLACE_EXISTING);
+}
+```
+
+**文件变更**:
+- 新增: `src/main/java/com/resources/util/ZipAlignUtil.java`
+- 新增: `src/main/java/com/resources/util/ApkSignerUtil.java`
+- 修改: `ResourceConfig.java` (添加autoSign字段)
+- 修改: `ResourceCLI.java` (添加CLI参数)
+- 修改: `ResourceProcessor.java` (添加performAlignAndSign方法)
+
+**使用示例**:
+```bash
+# 默认启用（可省略--auto-sign）
+java -jar rp.jar process-apk input/app.apk -c config.yaml
+
+# 禁用自动签名（手动签名）
+java -jar rp.jar process-apk input/app.apk -c config.yaml --no-auto-sign
+```
+
+**工具路径**:
+- zipalign: `bin/win/zipalign.exe`
+- apksigner: `bin/win/apksigner.bat`
+- 测试证书: `config/keystore/testkey.jks` (密码: testkey)
+
+**优先级**:
+1. CLI参数 `--auto-sign`/`--no-auto-sign`
+2. YAML配置 `options.auto_sign`
+3. 默认值 `true`
+
+**测试验证**:
+- ✅ 默认启用测试通过
+- ✅ `--no-auto-sign`禁用测试通过
+- ✅ YAML配置控制测试通过
+- ✅ CLI参数覆盖YAML测试通过
+
+**状态**: ✅ 已完成
+
+---
+
+### 功能 #7: YAML配置auto_sign支持
+
+**描述**: ResourceConfig支持从YAML加载和保存`auto_sign`选项。
+
+**实现**:
+```yaml
+options:
+  process_tools_context: true
+  enable_runtime_validation: false
+  keep_backup: true
+  parallel_processing: false
+  auto_sign: true  # 新增
+```
+
+**状态**: ✅ 已完成
+
+---
+
+### 功能 #8: 外部工具集成框架
+
+**描述**: 建立外部工具调用框架，支持zipalign和apksigner的健壮调用。
+
+**特性**:
+- ✅ 进程输出捕获和日志记录
+- ✅ 退出码检查和错误处理
+- ✅ 临时文件自动清理
+- ✅ 工具可用性检查
+
+**实现**:
+```java
+// ZipAlignUtil
+public static boolean isAvailable() { ... }
+public static void align(String input, String output, int alignment) { ... }
+
+// ApkSignerUtil
+public static boolean isAvailable() { ... }
+public static void signWithTestKey(String apkPath) { ... }
+```
+
+**状态**: ✅ 已完成
+
+---
+
 ## 🚀 性能优化
 
 ### 优化 #1: DEX加载缓存
@@ -822,12 +944,12 @@ public String getStatistics() {
 
 | 指标 | 数量 |
 |------|------|
-| 新增文件 | 2 |
-| 修改文件 | 15 |
-| 新增代码行 | +500 |
+| 新增文件 | 4 |
+| 修改文件 | 18 |
+| 新增代码行 | +800 |
 | 删除代码行 | -200 |
-| 净增代码行 | +300 |
-| 新增测试 | 4个类 |
+| 净增代码行 | +600 |
+| 新增测试 | 6个类 |
 
 ### 性能提升
 

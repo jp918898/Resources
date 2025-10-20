@@ -90,11 +90,12 @@ java -jar resources-processor.jar process-apk <APK文件> -c <配置文件> [选
 |------|------|------|
 | `-o, --output` | String | 输出APK路径 |
 | `--dex-path` | String[] | DEX文件路径（可多次指定） |
+| `--auto-sign` / `--no-auto-sign` | Boolean | 启用/禁用自动对齐和签名（默认启用） |
 | `-v, --verbose` | Boolean | 详细输出模式 |
 
 #### 常用示例
 ```bash
-# 基本使用
+# 基本使用（默认自动对齐和签名）
 java -jar rp.jar process-apk input/app.apk -c config.yaml
 
 # 指定输出路径
@@ -102,6 +103,9 @@ java -jar rp.jar process-apk input/app.apk -c config.yaml -o output/app.apk
 
 # 启用DEX验证
 java -jar rp.jar process-apk input/app.apk -c config.yaml --dex-path classes.dex -v
+
+# 禁用自动签名（正式发布）
+java -jar rp.jar process-apk input/app.apk -c config.yaml --no-auto-sign
 ```
 
 #### 返回码

@@ -122,25 +122,67 @@ java -jar resources-processor-1.0.0-all.jar scan input/myapp.apk -c config.yaml
 #### 第4步：处理APK
 
 ```bash
+# 默认已启用自动对齐和签名（使用测试证书）
 java -jar resources-processor-1.0.0-all.jar process-apk input/myapp.apk \
   -c config.yaml \
   -o output/myapp-processed.apk
 ```
 
-#### 第5步：重新签名
+**注意**: 
+- ✅ **默认已签名**: 处理后的APK已使用测试证书自动对齐和签名，可直接安装测试
+- ⚠️ **正式发布**: 需要使用 `--no-auto-sign` 参数，然后用正式证书手动签名
+
+#### 第5步：验证结果
 
 ```bash
-# 使用apksigner重新签名
-apksigner sign --ks my-release-key.jks output/myapp-processed.apk
-```
-
-#### 第6步：验证结果
-
-```bash
+# 验证APK资源
 java -jar resources-processor-1.0.0-all.jar validate output/myapp-processed.apk -v
+
+# 验证签名（已自动签名）
+apksigner verify output/myapp-processed.apk
+
+# 安装测试
+adb install output/myapp-processed.apk
 ```
 
-**完成！** 您的APK已成功处理。
+**完成！** 您的APK已成功处理并签名。
+
+---
+
+### 正式发布流程（使用正式证书）
+
+如果需要使用正式发布证书签名，请按以下步骤操作：
+
+#### 第1步：处理APK（禁用自动签名）
+
+```bash
+java -jar resources-processor-1.0.0-all.jar process-apk input/myapp.apk \
+  -c config.yaml \
+  -o output/myapp-processed.apk \
+  --no-auto-sign
+```
+
+#### 第2步：手动对齐
+
+```bash
+zipalign -p -f 4 output/myapp-processed.apk output/myapp-aligned.apk
+```
+
+#### 第3步：手动签名（使用正式证书）
+
+```bash
+apksigner sign --ks my-release-key.jks \
+  --out output/myapp-final.apk \
+  output/myapp-aligned.apk
+```
+
+#### 第4步：验证签名
+
+```bash
+apksigner verify --verbose output/myapp-final.apk
+```
+
+**完成！** 您的APK已使用正式证书签名，可以发布。
 
 ---
 
@@ -528,6 +570,17 @@ dex_paths:
 - 是否启用并行处理
 - `false` = 极致稳定，`true` = 更快但风险略高
 
+**auto_sign** (默认: `true`):
+- 是否自动对齐和签名APK
+- `true` = 自动使用测试证书签名（快速测试）
+- `false` = 不签名（需手动签名）
+
+**示例**:
+```yaml
+options:
+  auto_sign: false  # 禁用自动签名，用于正式发布
+```
+
 ---
 
 ## 命令使用指南
@@ -554,9 +607,10 @@ java -jar resources-processor.jar process-apk <APK文件> -c <配置文件> [选
 - `-c, --config <文件>` - 配置文件路径（必需）
 - `-o, --output <文件>` - 输出APK文件路径（可选）
 - `--dex-path <文件>` - DEX文件路径，可多次指定（可选）
+- `--auto-sign` / `--no-auto-sign` - 启用/禁用自动对齐和签名（可选，默认启用）
 - `-v, --verbose` - 详细输出模式（可选）
 
-**示例1: 基本使用**
+**示例1: 基本使用（默认自动签名）**
 ```bash
 java -jar resources-processor.jar process-apk input/app.apk -c config.yaml
 ```
@@ -575,6 +629,14 @@ java -jar resources-processor.jar process-apk input/app.apk \
   --dex-path input/classes.dex \
   --dex-path input/classes2.dex \
   -v
+```
+
+**示例4: 禁用自动签名（正式发布）**
+```bash
+java -jar resources-processor.jar process-apk input/app.apk \
+  -c config.yaml \
+  -o output/app-processed.apk \
+  --no-auto-sign
 ```
 
 **输出示例**:
@@ -748,15 +810,21 @@ dex_paths:
 
 4. **处理APK**:
 ```bash
+# 禁用自动签名（需要用正式证书签名）
 java -jar resources-processor.jar process-apk \
   app/build/outputs/apk/release/app-release.apk \
   -c config.yaml \
-  -o output/app-hardened.apk
+  -o output/app-hardened.apk \
+  --no-auto-sign
 ```
 
-5. **重新签名**:
+5. **重新签名（使用正式证书）**:
 ```bash
-apksigner sign --ks release.jks output/app-hardened.apk
+# 对齐
+zipalign -p -f 4 output/app-hardened.apk output/app-aligned.apk
+
+# 签名
+apksigner sign --ks release.jks output/app-aligned.apk
 ```
 
 ### 场景2: 马甲包批量生成
@@ -780,14 +848,19 @@ configs=(
 for config in "${configs[@]}"; do
   echo "处理: $config"
   
+  # 处理APK（默认自动签名，使用测试证书）
   java -jar resources-processor.jar process-apk \
     input/base.apk \
     -c "$config" \
     -o "output/$(basename $config .yaml).apk"
     
-  # 重新签名
-  apksigner sign --ks release.jks \
-    "output/$(basename $config .yaml).apk"
+  # 注：如需正式发布，添加 --no-auto-sign 参数，然后手动签名
+  # java -jar resources-processor.jar process-apk \
+  #   input/base.apk \
+  #   -c "$config" \
+  #   -o "output/$(basename $config .yaml).apk" \
+  #   --no-auto-sign
+  # apksigner sign --ks release.jks "output/$(basename $config .yaml).apk"
 done
 
 echo "批量处理完成！"
@@ -940,16 +1013,31 @@ java -jar resources-processor.jar process-apk app.apk -c config.yaml -v > proces
 
 ### Q1: 处理后APK无法安装？
 
-**原因**: APK未重新签名。
+**原因1**: APK签名无效（使用了`--no-auto-sign`但未手动签名）。
 
 **解决**:
 ```bash
-# 重新签名
+# 手动签名
 apksigner sign --ks my-release-key.jks output/app.apk
 
 # 验证签名
 apksigner verify output/app.apk
 ```
+
+**原因2**: 证书不匹配（覆盖安装）。
+
+**解决**:
+```bash
+# 先卸载旧版本
+adb uninstall <package-name>
+
+# 然后安装新版本
+adb install output/app.apk
+```
+
+**注意**: 
+- ✅ **默认已签名**: 如果使用默认配置，APK已自动使用测试证书签名
+- ⚠️ **测试证书**: 测试证书只能用于开发测试，不能用于正式发布
 
 ### Q2: 提示"DEX验证失败"？
 
@@ -1051,6 +1139,77 @@ ls temp/snapshots/
 # 手动恢复
 cp temp/snapshots/<transaction-id>/app.apk output/app-restored.apk
 ```
+
+### Q11: 处理后的APK已经签名了吗？
+
+**是的**: 默认情况下，处理后的APK已自动对齐和签名。
+
+**详细说明**:
+- ✅ **默认启用**: `--auto-sign` 是默认行为
+- 🔑 **使用证书**: 测试证书 `config/keystore/testkey.jks`
+- ⚠️ **仅供测试**: 测试证书**不能**用于正式发布
+
+**验证签名**:
+```bash
+# 查看签名信息
+apksigner verify --verbose output/app.apk
+
+# 输出示例：
+# Verified using v1 scheme (JAR signing): true
+# Verified using v2 scheme (APK Signature Scheme v2): true
+```
+
+**安装测试**:
+```bash
+# 已签名的APK可以直接安装
+adb install output/app.apk
+```
+
+### Q12: 如何使用正式证书签名？
+
+**步骤**: 使用 `--no-auto-sign` 参数，然后手动签名。
+
+**完整流程**:
+```bash
+# 第1步: 处理APK（禁用自动签名）
+java -jar resources-processor.jar process-apk input/app.apk \
+  -c config.yaml \
+  -o output/app.apk \
+  --no-auto-sign
+
+# 第2步: 对齐APK
+zipalign -p -f 4 output/app.apk output/app-aligned.apk
+
+# 第3步: 使用正式证书签名
+apksigner sign --ks my-release-key.jks \
+  --ks-key-alias my-key-alias \
+  --out output/app-final.apk \
+  output/app-aligned.apk
+
+# 第4步: 验证签名
+apksigner verify --verbose output/app-final.apk
+```
+
+**YAML配置方式**:
+```yaml
+options:
+  auto_sign: false  # 在配置文件中禁用
+```
+
+### Q13: 自动签名使用的是哪个证书？
+
+**证书路径**: `config/keystore/testkey.jks`  
+**证书密码**: `testkey`  
+**密钥别名**: `testkey`  
+**密钥密码**: `testkey`
+
+**证书用途**: 
+- ✅ 开发测试
+- ✅ 本地调试
+- ✅ CI/CD测试
+- ❌ **不可用于**正式发布到应用商店
+
+**自定义证书**: 当前版本暂不支持在CLI中指定自定义证书，请使用 `--no-auto-sign` 然后手动签名。
 
 ---
 

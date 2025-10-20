@@ -15,8 +15,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.logging.Logger;
 
-@SuppressWarnings("serial")
 public class StringItems extends ArrayList<StringItem> {
+	private static final long serialVersionUID = 1L;
 	private static final Logger LOGGER = Logger.getLogger(StringItems.class.getName());
 	
 	private static final int UTF8_FLAG = 0x00000100;
