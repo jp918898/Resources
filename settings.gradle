@@ -1,0 +1,7 @@
+/*
+ * Resources ARSC & AXML Processor
+ * 工业生产级resources.arsc和二进制XML处理模块
+ */
+
+rootProject.name = 'resources-processor'
+

@@ -1,0 +1,38 @@
+# Resources Processor 配置文件
+# 测试包名替换: com.mcxtzhang.swipemenulib -> com.zerozhang.swipemenulib
+
+version: "1.0"
+
+# 自有包前缀
+own_package_prefixes:
+  - com.mcxtzhang.swipemenulib
+  - com.mcxtzhang
+
+# 包名映射规则
+package_mappings:
+  com.mcxtzhang.swipemenulib: com.zerozhang.swipemenulib
+  com.mcxtzhang: com.zerozhang
+
+# 类名映射规则
+class_mappings: {}
+
+# 处理目标
+targets: []
+
+# DEX文件路径
+dex_paths:
+  - input/dex/classes.dex
+  - input/dex/classes2.dex
+  - input/dex/classes3.dex
+  - input/dex/classes4.dex
+  - input/dex/classes5.dex
+  - input/dex/classes6.dex
+
+# 选项
+options:
+  process_tools_context: true
+  enable_runtime_validation: false
+  keep_backup: true
+  parallel_processing: false
+
+

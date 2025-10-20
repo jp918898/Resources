@@ -1,0 +1,22 @@
+# 简单配置示例 - 最小化配置
+version: "1.0"
+
+# 自有包前缀
+own_package_prefixes:
+  - "com.example"
+
+# 包名映射（前缀匹配）
+package_mappings:
+  "com.example": "com.newapp"
+
+# DEX文件路径
+dex_paths:
+  - "input/classes.dex"
+
+# 基本选项
+options:
+  process_tools_context: false
+  enable_runtime_validation: false
+  keep_backup: true
+  parallel_processing: false
+

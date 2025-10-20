@@ -1,0 +1,43 @@
+# Resources Processor 配置文件
+# 用于测试包名替换功能
+
+version: "1.0"
+
+# 自有包前缀（需要替换的包）
+own_package_prefixes:
+  - com.mcxtzhang.swipemenulib
+
+# 包名映射规则
+package_mappings:
+  com.mcxtzhang.swipemenulib: com.zerozhang.swipemenulib
+
+# 类名映射规则（自动根据包名映射）
+class_mappings: {}
+
+# 处理目标（空表示处理所有）
+targets: []
+
+# DEX文件路径（用于交叉验证）
+dex_paths:
+  - input/dex/classes.dex
+  - input/dex/classes2.dex
+  - input/dex/classes3.dex
+  - input/dex/classes4.dex
+  - input/dex/classes5.dex
+  - input/dex/classes6.dex
+
+# 高级选项
+options:
+  # 是否处理 tools:context 属性
+  process_tools_context: true
+  
+  # 是否启用运行时验证（需要设备）
+  enable_runtime_validation: false
+  
+  # 是否保留备份
+  keep_backup: true
+  
+  # 是否并行处理
+  parallel_processing: false
+
+

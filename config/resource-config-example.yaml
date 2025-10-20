@@ -1,0 +1,54 @@
+# Resources Processor配置文件示例
+version: "1.0"
+
+# 自有包前缀（白名单）
+# 只有这些包前缀的类/包会被替换，系统包和第三方库会被保留
+own_package_prefixes:
+  - "com.example.app"
+  - "com.example.lib"
+
+# 包名映射
+# 格式：oldPackage: newPackage
+# 支持前缀匹配：com.example.app -> com.newapp.secure会自动处理com.example.app.ui等子包
+package_mappings:
+  "com.example.app": "com.newapp.secure"
+  "com.example.lib": "com.newlib.util"
+
+# 类名映射
+# 格式：oldClass: newClass
+# 需要列出所有需要精确替换的类名
+class_mappings:
+  "com.example.MainActivity": "com.newapp.MainActivity"
+  "com.example.ui.LoginActivity": "com.newapp.ui.LoginActivity"
+  "com.example.util.Helper": "com.newapp.util.Helper"
+  "com.example.widget.CustomView": "com.newapp.widget.CustomView"
+
+# 处理目标
+# 支持glob模式（如res/layout/**/*.xml）
+targets:
+  - "res/layout/**/*.xml"
+  - "res/menu/**/*.xml"
+  - "res/navigation/**/*.xml"
+  - "res/xml/**/*.xml"
+  - "resources.arsc"
+
+# DEX文件路径（用于DEX交叉验证）
+# 确保所有新类名在DEX中存在
+dex_paths:
+  - "input/classes.dex"
+  - "input/classes2.dex"
+
+# 高级选项
+options:
+  # 是否处理tools:context属性（用于脱敏，不影响运行）
+  process_tools_context: true
+  
+  # 是否启用运行时验证（需要连接Android设备）
+  enable_runtime_validation: false
+  
+  # 是否保留备份
+  keep_backup: true
+  
+  # 是否并行处理（false=极致稳定，true=更快但风险略高）
+  parallel_processing: false
+

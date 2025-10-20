@@ -1,0 +1,40 @@
+# Resources Processor 配置文件
+# 测试真实存在的包名替换
+# 原始包名: com.fbzgzt.nnkbjup (已混淆)
+# 新包名: com.zerozhang.dragonfly
+
+version: "1.0"
+
+# 自有包前缀（APK中实际存在的包名）
+own_package_prefixes:
+  - com.fbzgzt.nnkbjup
+  - com.fbzgzt
+
+# 包名映射规则
+package_mappings:
+  com.fbzgzt.nnkbjup: com.zerozhang.dragonfly
+  com.fbzgzt: com.zerozhang
+
+# 类名映射规则
+class_mappings: {}
+
+# 处理目标
+targets: []
+
+# DEX文件路径
+dex_paths:
+  - input/dex/classes.dex
+  - input/dex/classes2.dex
+  - input/dex/classes3.dex
+  - input/dex/classes4.dex
+  - input/dex/classes5.dex
+  - input/dex/classes6.dex
+
+# 选项
+options:
+  process_tools_context: true
+  enable_runtime_validation: false
+  keep_backup: true
+  parallel_processing: false
+
+

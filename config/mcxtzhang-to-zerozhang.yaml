@@ -1,0 +1,49 @@
+version: "1.0"
+
+# 自有包前缀（白名单）
+# 只处理com.mcxtzhang开头的类名
+# 注意：主包名com.fbzgzt.nnkbjup不改
+own_package_prefixes:
+  - "com.mcxtzhang"
+
+# 包名映射（前缀匹配）
+# com.mcxtzhang -> com.zerozhang
+# 例如：com.mcxtzhang.swipemenulib.SwipeMenuLayout -> com.zerozhang.swipemenulib.SwipeMenuLayout
+package_mappings:
+  "com.mcxtzhang": "com.zerozhang"
+
+# 类名映射（精确匹配）
+# 如果有特定类需要精确映射，可以在这里添加
+# 通常包名映射已经足够（会自动处理所有子包下的类）
+class_mappings: {}
+
+# 处理目标
+# 注意：此APK资源已被混淆，文件全部在res/根目录
+targets:
+  - "res/*.xml"          # res根目录下的所有XML（已被混淆打平）
+  - "res/**/*.xml"       # res子目录下的XML（如果有）
+  # resources.arsc 不需要处理：
+  # 1. DEX已手动修改完成
+  # 2. AXML中的类名存储在二进制XML文件内部的字符串池，不在resources.arsc全局字符串池
+
+# DEX文件路径（用于DEX交叉验证）
+# DEX已在APK内部修改，跳过DEX交叉验证
+dex_paths: []
+
+# 高级选项
+options:
+  # 处理tools:context属性（用于脱敏，不影响运行）
+  process_tools_context: true
+  
+  # 是否启用运行时验证（需要连接Android设备）
+  enable_runtime_validation: false
+  
+  # 是否保留备份
+  keep_backup: true
+  
+  # 是否并行处理（false=极致稳定，true=更快但风险略高）
+  parallel_processing: false
+  
+  # 跳过aapt2验证（临时调试用）
+  skip_aapt2_validation: true
+

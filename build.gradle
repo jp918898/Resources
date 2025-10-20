@@ -1,0 +1,205 @@
+/*
+ * Resources ARSC & AXML Processor - Build Configuration
+ * 工业生产级构建配置
+ */
+
+plugins {
+    id 'java-library'
+    id 'application'
+    id 'maven-publish'
+}
+
+group = 'com.resources'
+version = '1.0.0'
+
+// Java版本配置
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+    
+    // 生成源码JAR（暂时禁用JavaDoc以加快构建）
+    withSourcesJar()
+    // withJavadocJar()
+}
+
+// 编码配置 - 强制UTF-8
+tasks.withType(JavaCompile) {
+    options.encoding = 'UTF-8'
+    options.compilerArgs += ['-parameters', '-Xlint:all', '-Xlint:-processing']
+}
+
+tasks.withType(Javadoc) {
+    options.encoding = 'UTF-8'
+    options.charSet = 'UTF-8'
+}
+
+tasks.withType(Test) {
+    systemProperty 'file.encoding', 'UTF-8'
+}
+
+repositories {
+    mavenCentral()
+    google()
+}
+
+dependencies {
+    // DEX处理 - dexlib2
+    implementation 'com.android.tools.smali:smali-dexlib2:3.0.3'
+    
+    // 命令行工具 - picocli
+    implementation 'info.picocli:picocli:4.7.5'
+    annotationProcessor 'info.picocli:picocli-codegen:4.7.5'
+    
+    // YAML配置
+    implementation 'org.yaml:snakeyaml:2.2'
+    
+    // JSON处理
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.15.2'
+    implementation 'com.fasterxml.jackson.core:jackson-core:2.15.2'
+    implementation 'com.fasterxml.jackson.core:jackson-annotations:2.15.2'
+    
+    // 日志框架
+    implementation 'org.slf4j:slf4j-api:2.0.9'
+    implementation 'ch.qos.logback:logback-classic:1.4.11'
+    implementation 'ch.qos.logback:logback-core:1.4.11'
+    
+    // 工具类
+    implementation 'com.google.guava:guava:32.1.3-jre'
+    implementation 'org.apache.commons:commons-lang3:3.13.0'
+    implementation 'commons-io:commons-io:2.15.0'
+    
+    // 测试依赖
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.0'
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.10.0'
+    testImplementation 'org.junit.jupiter:junit-jupiter-params:5.10.0'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.10.0'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.10.0'
+    testImplementation 'org.mockito:mockito-core:5.6.0'
+    testImplementation 'org.mockito:mockito-junit-jupiter:5.6.0'
+    testImplementation 'org.assertj:assertj-core:3.24.2'
+}
+
+// 应用配置
+application {
+    mainClass = 'com.resources.cli.ResourceCLI'
+    applicationDefaultJvmArgs = [
+        '-Dfile.encoding=UTF-8',
+        '-Xmx2g',
+        '-XX:+UseG1GC'
+    ]
+}
+
+// Fat JAR配置 - 包含所有依赖
+task fatJar(type: Jar) {
+    archiveClassifier = 'all'
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    
+    manifest {
+        attributes 'Main-Class': 'com.resources.cli.ResourceCLI'
+    }
+    
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+    
+    with jar
+}
+
+// 测试配置
+test {
+    useJUnitPlatform()
+    
+    // 测试JVM参数
+    maxHeapSize = '2g'
+    jvmArgs = ['-Dfile.encoding=UTF-8']
+    
+    // 测试报告
+    testLogging {
+        events 'passed', 'skipped', 'failed'
+        exceptionFormat = 'full'
+        showStandardStreams = true
+    }
+    
+    // 失败时继续
+    ignoreFailures = false
+    
+    // 确保测试类能找到
+    scanForTestClasses = true
+}
+
+// JAR配置
+jar {
+    manifest {
+        attributes(
+            'Implementation-Title': 'Resources ARSC & AXML Processor',
+            'Implementation-Version': version,
+            'Main-Class': 'com.resources.cli.ResourceCLI',
+            'Created-By': 'Gradle ' + gradle.gradleVersion,
+            'Build-Jdk': System.getProperty('java.version')
+        )
+    }
+    
+    // 排除重复文件
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+// 发布配置
+publishing {
+    publications {
+        maven(MavenPublication) {
+            from components.java
+            
+            pom {
+                name = 'Resources ARSC & AXML Processor'
+                description = '工业生产级resources.arsc和二进制XML处理模块'
+                url = 'https://github.com/frezrik/jiagu-resources'
+                
+                licenses {
+                    license {
+                        name = 'The Apache License, Version 2.0'
+                        url = 'http://www.apache.org/licenses/LICENSE-2.0.txt'
+                    }
+                }
+            }
+        }
+    }
+}
+
+// 自定义任务：创建目录结构
+task createDirs {
+    doLast {
+        def dirs = [
+            'src/main/java/com/resources/arsc',
+            'src/main/java/com/resources/axml',
+            'src/main/java/com/resources/scanner',
+            'src/main/java/com/resources/mapping',
+            'src/main/java/com/resources/validator',
+            'src/main/java/com/resources/transaction',
+            'src/main/java/com/resources/report',
+            'src/main/java/com/resources/model',
+            'src/main/java/com/resources/config',
+            'src/main/java/com/resources/cli',
+            'src/main/java/com/resources/util',
+            'src/main/resources',
+            'src/test/java',
+            'src/test/resources',
+            'config',
+            'docs',
+            'temp/snapshots',
+            'logs'
+        ]
+        
+        dirs.each { dir ->
+            file(dir).mkdirs()
+            println "创建目录: $dir"
+        }
+    }
+}
+
+// 清理任务增强
+clean {
+    delete 'temp'
+    delete 'logs'
+    delete 'build'
+}
+

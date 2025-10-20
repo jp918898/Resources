@@ -1,0 +1,59 @@
+[
+  {
+    "name" : "com.resources.cli.ResourceCLI",
+    "allDeclaredConstructors" : true,
+    "allPublicConstructors" : true,
+    "allDeclaredMethods" : true,
+    "allPublicMethods" : true
+  },
+  {
+    "name" : "com.resources.cli.ResourceCLI$ProcessApkCommand",
+    "allDeclaredConstructors" : true,
+    "allPublicConstructors" : true,
+    "allDeclaredMethods" : true,
+    "allPublicMethods" : true,
+    "fields" : [
+      { "name" : "apkPath" },
+      { "name" : "configPath" },
+      { "name" : "dexPaths" },
+      { "name" : "outputPath" },
+      { "name" : "verbose" }
+    ]
+  },
+  {
+    "name" : "com.resources.cli.ResourceCLI$ScanCommand",
+    "allDeclaredConstructors" : true,
+    "allPublicConstructors" : true,
+    "allDeclaredMethods" : true,
+    "allPublicMethods" : true,
+    "fields" : [
+      { "name" : "apkPath" },
+      { "name" : "configPath" },
+      { "name" : "outputPath" },
+      { "name" : "verbose" }
+    ]
+  },
+  {
+    "name" : "com.resources.cli.ResourceCLI$ValidateCommand",
+    "allDeclaredConstructors" : true,
+    "allPublicConstructors" : true,
+    "allDeclaredMethods" : true,
+    "allPublicMethods" : true,
+    "fields" : [
+      { "name" : "apkPath" },
+      { "name" : "dexPaths" },
+      { "name" : "verbose" }
+    ]
+  },
+  {
+    "name" : "picocli.CommandLine$AutoHelpMixin",
+    "allDeclaredConstructors" : true,
+    "allPublicConstructors" : true,
+    "allDeclaredMethods" : true,
+    "allPublicMethods" : true,
+    "fields" : [
+      { "name" : "helpRequested" },
+      { "name" : "versionRequested" }
+    ]
+  }
+]
