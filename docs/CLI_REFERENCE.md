@@ -258,6 +258,77 @@ java -jar resources-processor.jar process-apk input/app.apk \
 3. 检查配置中的新类名是否在DEX中存在
 4. 如果不存在，终止处理并报错
 
+#### --auto-sign / --no-auto-sign
+
+启用或禁用自动对齐和签名APK。
+
+**类型**: Boolean  
+**必需**: ❌ 否  
+**默认**: `--auto-sign` (启用)  
+**描述**: 控制是否在处理APK后自动执行对齐(zipalign)和签名(apksigner)
+
+**使用说明**:
+- **默认行为**: 处理APK后会自动执行对齐和签名
+- **对齐工具**: `bin/win/zipalign.exe` (4字节对齐)
+- **签名工具**: `bin/win/apksigner.bat`
+- **测试证书**: `config/keystore/testkey.jks` (密码: `testkey`)
+
+**示例1: 默认启用（可省略）**:
+```bash
+# 默认已启用对齐和签名
+java -jar resources-processor.jar process-apk input/app.apk -c config.yaml
+
+# 显式启用（效果相同）
+java -jar resources-processor.jar process-apk input/app.apk -c config.yaml --auto-sign
+```
+
+**示例2: 禁用对齐和签名**:
+```bash
+# 不对齐、不签名（需要手动处理）
+java -jar resources-processor.jar process-apk input/app.apk \
+  -c config.yaml \
+  --no-auto-sign
+```
+
+**示例3: 禁用后手动签名**:
+```bash
+# 第1步: 处理APK（不签名）
+java -jar resources-processor.jar process-apk input/app.apk \
+  -c config.yaml \
+  -o output/app.apk \
+  --no-auto-sign
+
+# 第2步: 手动对齐
+bin/win/zipalign.exe 4 output/app.apk output/app-aligned.apk
+
+# 第3步: 手动签名（使用自己的证书）
+apksigner sign --ks my-release-key.jks output/app-aligned.apk
+```
+
+**YAML配置文件控制**:
+```yaml
+options:
+  auto_sign: false  # 在配置文件中禁用
+```
+
+**优先级**:
+- CLI参数 `--auto-sign` / `--no-auto-sign` **高于** YAML配置
+- 如果CLI未指定，使用YAML配置
+- 如果YAML未配置，默认启用
+
+**使用场景**:
+- ✅ **启用**: 快速测试、本地开发、CI/CD自动化
+- ❌ **禁用**: 需要使用正式发布证书签名时
+
+**工具要求**:
+- Windows: 需要 `bin/win/zipalign.exe` 和 `bin/win/apksigner.bat`
+- 测试证书: `config/keystore/testkey.jks` (仅用于测试，不可用于发布)
+
+**注意事项**:
+⚠️ **默认使用测试证书**: 自动签名使用测试证书，仅供测试使用  
+⚠️ **正式发布**: 必须使用 `--no-auto-sign`，然后用正式证书手动签名  
+⚠️ **工具路径**: 对齐和签名工具必须在 `bin/win/` 目录下
+
 #### -v, --verbose
 
 详细输出模式。
@@ -309,13 +380,17 @@ java -jar resources-processor.jar process-apk input/app.apk \
    ├─ 处理AXML文件
    └─ 处理resources.arsc
 
-8. Phase 4: 后验证（跳过）
+8. Phase 4: 对齐和签名（可选）
+   ├─ zipalign对齐APK
+   └─ apksigner签名APK
+
+9. Phase 5: 后验证（跳过）
    └─ aapt2验证（混淆APK跳过）
 
-9. 提交事务
-   └─ 生成处理报告
+10. 提交事务
+    └─ 生成处理报告
 
-10. 返回结果
+11. 返回结果
 ```
 
 ### 输出示例
@@ -414,6 +489,18 @@ java -jar resources-processor.jar process-apk input/app.apk \
 java -Xmx4g -jar resources-processor.jar process-apk large-app.apk \
   -c config.yaml \
   -o output/large-app-processed.apk
+```
+
+**示例6: 禁用自动签名（用于正式发布）**
+```bash
+# 处理但不签名
+java -jar resources-processor.jar process-apk input/app.apk \
+  -c config.yaml \
+  -o output/app.apk \
+  --no-auto-sign
+
+# 手动使用发布证书签名
+apksigner sign --ks release.jks output/app.apk
 ```
 
 ---

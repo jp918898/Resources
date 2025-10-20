@@ -240,11 +240,17 @@ public class VirtualFileSystem {
                     
                     long entrySize = entry.getSize();
                     
-                    // 检查单个文件大小限制
+                    // 先检查单个文件大小限制（在readAllBytes()之前，防止ZIP bomb）
                     if (entrySize > maxFileSize) {
                         log.warn("跳过超大文件: {} (大小: {} MB, 限制: {} MB)", 
                                 entryPath, entrySize / 1024 / 1024, maxFileSize / 1024 / 1024);
-                        continue;
+                        continue;  // 不读取数据，直接跳过
+                    }
+                    
+                    // 检查大小未知的文件（ZIP bomb可能利用此漏洞）
+                    if (entrySize < 0) {
+                        log.warn("跳过大小未知的文件: {} (size={})", entryPath, entrySize);
+                        continue;  // 不读取数据，直接跳过
                     }
                     
                     // 检查总大小限制
@@ -256,13 +262,14 @@ public class VirtualFileSystem {
                                         maxTotalSize / 1024 / 1024));
                     }
                     
+                    // 读取数据（已经过大小验证，安全）
                     try (InputStream is = zipFile.getInputStream(entry)) {
                         byte[] data = is.readAllBytes();
                         
-                        // 二次验证实际读取的大小（ZIP可能报告不准确）
+                        // 二次验证实际读取的大小（防御ZIP报告不准确）
                         if (data.length > maxFileSize) {
-                            log.warn("跳过实际大小超限的文件: {} ({} MB)", 
-                                    entryPath, data.length / 1024 / 1024);
+                            log.warn("跳过实际大小超限的文件: {} (实际: {} MB, 报告: {} MB)", 
+                                    entryPath, data.length / 1024 / 1024, entrySize / 1024 / 1024);
                             continue;
                         }
                         

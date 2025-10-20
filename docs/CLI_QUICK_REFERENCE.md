@@ -45,11 +45,12 @@ java -jar resources-processor.jar process-apk <APK> -c <CONFIG> [OPTIONS]
 **可选参数**:
 - `-o <FILE>` - 输出APK路径
 - `--dex-path <FILE>` - DEX文件路径（可多次指定）
+- `--auto-sign` / `--no-auto-sign` - 启用/禁用自动对齐和签名（默认启用）
 - `-v` - 详细输出
 
 **示例**:
 ```bash
-# 基本使用
+# 基本使用（默认自动对齐和签名）
 java -jar rp.jar process-apk app.apk -c config.yaml
 
 # 指定输出
@@ -58,6 +59,9 @@ java -jar rp.jar process-apk app.apk -c config.yaml -o output/app.apk
 # 启用DEX验证
 java -jar rp.jar process-apk app.apk -c config.yaml \
   --dex-path classes.dex --dex-path classes2.dex -v
+
+# 禁用自动签名（手动签名）
+java -jar rp.jar process-apk app.apk -c config.yaml --no-auto-sign
 ```
 
 ---
@@ -179,14 +183,14 @@ java -jar rp.jar process-apk input/app.apk -c config.yaml -o output/app.apk
 # 第4步: 验证结果
 java -jar rp.jar validate output/app.apk --dex-path output/classes.dex
 
-# 第5步: 重新签名
-apksigner sign --ks release.jks output/app.apk
-
-# 第6步: 验证签名
+# 第5步: 验证签名（已自动签名）
 apksigner verify output/app.apk
 
-# 第7步: 安装测试
+# 第6步: 安装测试
 adb install -r output/app.apk
+
+# 注: 如使用 --no-auto-sign，需在第5步前手动签名:
+# apksigner sign --ks release.jks output/app.apk
 ```
 
 ---

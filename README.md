@@ -68,15 +68,25 @@ dex_paths:
 # 扫描APK（预览修改点）
 java -jar resources-processor-1.0.1-all.jar scan input/myapp.apk -c config/my-config.yaml
 
-# 处理APK
+# 处理APK（默认自动对齐和签名）
 java -jar resources-processor-1.0.1-all.jar process-apk input/myapp.apk -c config/my-config.yaml
 
 # 验证结果
 java -jar resources-processor-1.0.1-all.jar validate output/myapp.apk
 ```
 
-#### 3. 重新签名（必需）
+**注意**: 
+- ✅ **默认已对齐和签名**: 处理后的APK已使用测试证书签名，可直接安装测试
+- ⚠️ **正式发布**: 使用 `--no-auto-sign` 参数，然后用正式证书手动签名
+
+#### 3. 正式发布签名（可选）
 ```bash
+# 禁用自动签名
+java -jar resources-processor-1.0.1-all.jar process-apk input/myapp.apk \
+  -c config/my-config.yaml \
+  --no-auto-sign
+
+# 手动签名（使用发布证书）
 apksigner sign --ks my-release-key.jks output/myapp.apk
 ```
 
@@ -252,6 +262,9 @@ open build/reports/tests/test/index.html
 - ✅ DexUtils工具类
 - ✅ DexClassCache缓存类
 - ✅ ResourceConfig.toBuilder()方法
+- ✅ **自动对齐和签名**: 新增 `--auto-sign`/`--no-auto-sign` CLI参数
+- ✅ **集成工具**: zipalign和apksigner自动调用（默认启用）
+- ✅ **测试证书**: 内置测试证书用于快速测试
 
 ### 详细记录
 见 [修复实施报告](docs/FIXES_IMPLEMENTED.md)

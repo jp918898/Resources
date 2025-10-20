@@ -7,8 +7,10 @@ import com.resources.mapping.WhitelistFilter;
 import com.resources.model.*;
 import com.resources.scanner.ResourceScanner;
 import com.resources.transaction.TransactionManager;
+import com.resources.util.ApkSignerUtil;
 import com.resources.util.VirtualFileSystem;
 import com.resources.util.VfsResourceProvider;
+import com.resources.util.ZipAlignUtil;
 import com.resources.validator.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -112,17 +114,13 @@ public class ResourceProcessor {
             resultBuilder.totalModifications(replaceCount);
             
             // 5. aapt2验证（跳过，用于混淆APK）
-            log.warn("────────────────────────────────────────");
-            log.warn("  Phase 4: aapt2验证 [已跳过]");
-            log.warn("────────────────────────────────────────");
-            
             // 混淆APK无法通过aapt2验证，跳过此步骤
             ValidationResult aapt2Validation = new ValidationResult.Builder()
                 .addSkipped(ValidationResult.ValidationLevel.AAPT2_STATIC, "aapt2验证已跳过（混淆APK）")
                 .build();
             resultBuilder.validationResult(aapt2Validation);
             
-            log.warn("aapt2验证已跳过（混淆APK特殊处理）");
+            log.info("aapt2验证已跳过（混淆APK特殊处理）");
             
             // 6. 提交事务
             transactionManager.commit(tx, new ArrayList<>());
@@ -236,13 +234,30 @@ public class ResourceProcessor {
         totalReplaceCount += 1;
         log.info("ARSC处理完成");
         
-        // 5. 导出APK
+        // 5. 导出APK到临时文件
         String tempApkPath = apkPath + ".tmp";
         vfs.saveToApk(tempApkPath);
+        log.info("VFS导出完成: {}", tempApkPath);
         
-        // 6. 替换原文件
-        Files.move(Paths.get(tempApkPath), Paths.get(apkPath), REPLACE_EXISTING);
-        log.info("APK已更新: {}", apkPath);
+        // 6. 条件对齐和签名
+        if (config.isAutoSign()) {
+            performAlignAndSign(tempApkPath, apkPath);
+        } else {
+            // 直接替换原文件，不对齐不签名
+            try {
+                Files.move(Paths.get(tempApkPath), Paths.get(apkPath), REPLACE_EXISTING);
+                log.info("APK已更新（未对齐、未签名）: {}", apkPath);
+            } catch (IOException e) {
+                log.error("替换APK文件失败", e);
+                // 清理临时文件
+                try {
+                    Files.deleteIfExists(Paths.get(tempApkPath));
+                } catch (IOException cleanupError) {
+                    log.warn("清理临时文件失败: {}", tempApkPath, cleanupError);
+                }
+                throw new IOException("替换APK文件失败: " + e.getMessage(), e);
+            }
+        }
         
         log.info(vfs.getStatistics());
         
@@ -453,6 +468,71 @@ public class ResourceProcessor {
                  config.getPackageMappings().size());
         
         return replacements;
+    }
+    
+    /**
+     * 执行对齐和签名
+     * 
+     * @param tempApkPath 临时APK路径（VFS导出的未签名APK）
+     * @param finalApkPath 最终APK路径（对齐签名后的APK）
+     * @throws IOException 对齐或签名失败
+     */
+    private void performAlignAndSign(String tempApkPath, String finalApkPath) throws IOException {
+        log.info("────────────────────────────────────────");
+        log.info("  对齐和签名APK");
+        log.info("────────────────────────────────────────");
+        
+        String alignedApkPath = finalApkPath + ".aligned.tmp";
+        
+        // 对齐
+        try {
+            ZipAlignUtil.align(tempApkPath, alignedApkPath, 4);
+            log.info("✓ APK对齐完成");
+        } catch (Exception e) {
+            log.error("APK对齐失败", e);
+            throw new IOException("APK对齐失败: " + e.getMessage(), e);
+        } finally {
+            // 清理临时文件
+            try {
+                Files.deleteIfExists(Paths.get(tempApkPath));
+            } catch (IOException cleanupError) {
+                log.warn("清理临时文件失败: {}", tempApkPath, cleanupError);
+            }
+        }
+        
+        // 签名
+        try {
+            ApkSignerUtil.signWithTestKey(alignedApkPath);
+            log.info("✓ APK签名完成");
+        } catch (Exception e) {
+            log.error("APK签名失败", e);
+            
+            // 清理临时文件
+            try {
+                Files.deleteIfExists(Paths.get(alignedApkPath));
+            } catch (IOException cleanupError) {
+                log.warn("清理临时文件失败: {}", alignedApkPath, cleanupError);
+            }
+            
+            throw new IOException("APK签名失败: " + e.getMessage(), e);
+        }
+        
+        // 替换原文件
+        try {
+            Files.move(Paths.get(alignedApkPath), Paths.get(finalApkPath), REPLACE_EXISTING);
+            log.info("✓ APK已更新（已对齐+已签名）: {}", finalApkPath);
+        } catch (IOException e) {
+            log.error("替换APK文件失败", e);
+            
+            // 清理临时文件
+            try {
+                Files.deleteIfExists(Paths.get(alignedApkPath));
+            } catch (IOException cleanupError) {
+                log.warn("清理临时文件失败: {}", alignedApkPath, cleanupError);
+            }
+            
+            throw new IOException("替换APK文件失败: " + e.getMessage(), e);
+        }
     }
 }
 

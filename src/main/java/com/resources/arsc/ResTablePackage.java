@@ -3,8 +3,11 @@ package com.resources.arsc;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -41,6 +44,15 @@ public class ResTablePackage {
     
     private ResStringPool typeStrings;       // 类型字符串池（如"attr", "layout", "string"等）
     private ResStringPool keyStrings;        // 资源名字符串池（如"app_name", "main_activity"等）
+    
+    // typeSpec和type chunks（用于完整重建）
+    private List<ResTableTypeSpec> typeSpecs = new ArrayList<>();
+    private List<ResTableType> types = new ArrayList<>();
+    
+    // 修改标志
+    private boolean nameModified = false;
+    private boolean typeStringsModified = false;
+    private boolean keyStringsModified = false;
     
     // 原始数据（用于写回时保持其他chunk不变）
     private byte[] originalData;
@@ -131,16 +143,61 @@ public class ResTablePackage {
                 log.debug("资源名字符串池: {} 个资源", keyStrings.getStringCount());
             }
             
-            // 7. 保存原始数据（用于写回）
+            // 7. 解析typeSpec和type chunks
+            log.debug("开始解析typeSpec和type chunks");
+            
+            while (buffer.position() < startPosition + chunkSize) {
+                if (buffer.remaining() < 8) {
+                    log.debug("剩余字节不足8，停止解析");
+                    break;
+                }
+                
+                int chunkPos = buffer.position();
+                int chunkType = buffer.getShort() & 0xFFFF;
+                buffer.position(chunkPos);  // 回退
+                
+                if (chunkType == 0x0202) {  // RES_TABLE_TYPE_SPEC_TYPE
+                    try {
+                        ResTableTypeSpec spec = new ResTableTypeSpec();
+                        spec.parse(buffer);
+                        typeSpecs.add(spec);
+                        log.debug("解析typeSpec: {}", spec);
+                    } catch (Exception e) {
+                        log.warn("解析typeSpec失败，停止解析: {}", e.getMessage());
+                        break;
+                    }
+                } else if (chunkType == 0x0201) {  // RES_TABLE_TYPE_TYPE
+                    try {
+                        ResTableType typeChunk = new ResTableType();
+                        typeChunk.parse(buffer);
+                        types.add(typeChunk);
+                        log.debug("解析type: {}", typeChunk);
+                    } catch (Exception e) {
+                        log.warn("解析type失败，停止解析: {}", e.getMessage());
+                        break;
+                    }
+                } else {
+                    log.debug("遇到未知chunk类型0x{}, 停止解析", 
+                             Integer.toHexString(chunkType));
+                    break;
+                }
+            }
+            
+            log.info("typeSpec/type解析完成: typeSpecs={}, types={}", 
+                    typeSpecs.size(), types.size());
+            
+            // 8. 保存原始数据（用于写回）
             this.originalSize = chunkSize;
             buffer.position(startPosition);
             this.originalData = new byte[chunkSize];
             buffer.get(this.originalData);
             
-            log.info("资源包解析完成: id=0x{}, name='{}', types={}, keys={}", 
+            log.info("资源包解析完成: id=0x{}, name='{}', typeStrings={}, keyStrings={}, typeSpecs={}, types={}", 
                     Integer.toHexString(id), name, 
                     typeStrings != null ? typeStrings.getStringCount() : 0,
-                    keyStrings != null ? keyStrings.getStringCount() : 0);
+                    keyStrings != null ? keyStrings.getStringCount() : 0,
+                    typeSpecs.size(),
+                    types.size());
             
         } catch (Exception e) {
             log.error("资源包解析失败", e);
@@ -170,8 +227,51 @@ public class ResTablePackage {
         String oldName = this.name;
         this.name = newName;
         
+        // 标记包名已修改
+        if (!oldName.equals(newName)) {
+            this.nameModified = true;
+        }
+        
         log.info("包名修改: '{}' -> '{}' (packageId保持0x{})", 
                 oldName, newName, Integer.toHexString(id));
+    }
+    
+    /**
+     * 修改类型字符串
+     * 
+     * @param index 字符串索引
+     * @param value 新值
+     */
+    public void setTypeString(int index, String value) {
+        Objects.requireNonNull(value, "value不能为null");
+        
+        if (typeStrings == null) {
+            throw new IllegalStateException("typeStrings未初始化");
+        }
+        
+        typeStrings.setString(index, value);
+        typeStringsModified = true;
+        
+        log.info("类型字符串修改[{}]: -> '{}'", index, value);
+    }
+    
+    /**
+     * 修改资源名字符串
+     * 
+     * @param index 字符串索引
+     * @param value 新值
+     */
+    public void setKeyString(int index, String value) {
+        Objects.requireNonNull(value, "value不能为null");
+        
+        if (keyStrings == null) {
+            throw new IllegalStateException("keyStrings未初始化");
+        }
+        
+        keyStrings.setString(index, value);
+        keyStringsModified = true;
+        
+        log.info("资源名字符串修改[{}]: -> '{}'", index, value);
     }
     
     /**
@@ -186,31 +286,25 @@ public class ResTablePackage {
         
         int startPosition = buffer.position();
         
-        // 策略：
-        // 1. 如果只修改了包名，使用原始数据并只更新包名部分
-        // 2. 如果修改了字符串池，需要完整重建
+        // 策略判断：
+        // 1. 如果修改了typeStrings或keyStrings，需要完整重建
+        // 2. 否则使用原始数据并只更新包名部分
         
-        if (originalData != null && typeStrings != null && keyStrings != null) {
-            // 使用原始数据修改包名
-            // 
-            // 设计说明：当前实现仅支持包名修改（修改offset 12-268的256字节）
-            // 这对于包名/类名随机化场景已经足够
-            // 
-            // 完整重建需要处理：
-            // - ResTable_typeSpec chunks
-            // - ResTable_type chunks
-            // - ResTable_config
-            // 
-            // 由于这些结构复杂且当前场景不需要，暂不实现
-            writeWithOriginalData(buffer);
+        if (typeStringsModified || keyStringsModified) {
+            return writeWithFullRebuild(buffer);
         } else {
-            throw new IllegalStateException(
-                "ResTablePackage缺少原始数据，无法写入。" +
-                "这通常意味着解析失败或数据损坏。");
+            if (originalData != null && typeStrings != null && keyStrings != null) {
+                writeWithOriginalData(buffer);
+            } else {
+                throw new IllegalStateException(
+                    "ResTablePackage缺少原始数据，无法写入。" +
+                    "这通常意味着解析失败或数据损坏。");
+            }
         }
         
         int bytesWritten = buffer.position() - startPosition;
-        log.info("资源包写入完成: {} 字节", bytesWritten);
+        log.info("资源包写入完成: {} 字节 (重建模式={})", 
+                bytesWritten, typeStringsModified || keyStringsModified);
         
         return bytesWritten;
     }
@@ -238,7 +332,186 @@ public class ResTablePackage {
         // 写入修改后的数据
         buffer.put(modifiedData);
         
-        log.debug("使用原始数据写入，仅修改包名");
+        log.debug("使用原始数据写入，仅修改包名 (nameModified={})", nameModified);
+    }
+    
+    /**
+     * 完整重建package chunk
+     * 
+     * 当typeStrings或keyStrings被修改时调用
+     * 完整重建所有chunk：header + typeStrings + keyStrings + typeSpecs + types
+     * 
+     * @param buffer ByteBuffer
+     * @return 写入的字节数
+     */
+    private int writeWithFullRebuild(ByteBuffer buffer) {
+        int startPos = buffer.position();
+        
+        log.info("开始完整重建package chunk");
+        
+        // 1. 计算新chunk大小
+        int headerSize = HEADER_SIZE;
+        int typeStringsSize = calculateStringPoolSize(typeStrings);
+        int keyStringsSize = calculateStringPoolSize(keyStrings);
+        int typeSpecsSize = typeSpecs.stream().mapToInt(ResTableTypeSpec::getChunkSize).sum();
+        int typesSize = types.stream().mapToInt(ResTableType::getChunkSize).sum();
+        int newChunkSize = headerSize + typeStringsSize + keyStringsSize + typeSpecsSize + typesSize;
+        
+        log.debug("计算chunk大小: header={}, typeStrings={}, keyStrings={}, typeSpecs={}, types={}, total={}",
+                 headerSize, typeStringsSize, keyStringsSize, typeSpecsSize, typesSize, newChunkSize);
+        
+        // 2. 写入package header (288字节)
+        buffer.putShort((short) RES_TABLE_PACKAGE_TYPE);
+        buffer.putShort((short) HEADER_SIZE);
+        buffer.putInt(newChunkSize);
+        buffer.putInt(id);
+        
+        // 3. 写入包名 (char16_t[128] = 256字节)
+        for (int i = 0; i < PACKAGE_NAME_MAX_LENGTH; i++) {
+            if (i < name.length()) {
+                buffer.putChar(name.charAt(i));
+            } else {
+                buffer.putChar((char) 0);
+            }
+        }
+        
+        // 4. 写入偏移和保留字段（16字节）
+        int typeStringsOffset = headerSize;
+        int keyStringsOffset = typeStringsOffset + typeStringsSize;
+        
+        buffer.putInt(typeStringsOffset);
+        buffer.putInt(0);  // lastPublicType
+        buffer.putInt(keyStringsOffset);
+        buffer.putInt(0);  // lastPublicKey
+        buffer.putInt(0);  // typeIdOffset
+        
+        // 5. 写入typeStrings
+        int typeStringsWritten = typeStrings.write(buffer);
+        log.debug("typeStrings写入: {} 字节 (预计={})", typeStringsWritten, typeStringsSize);
+        
+        // 6. 写入keyStrings
+        int keyStringsWritten = keyStrings.write(buffer);
+        log.debug("keyStrings写入: {} 字节 (预计={})", keyStringsWritten, keyStringsSize);
+        
+        // 7. 写入所有typeSpec
+        int typeSpecsWritten = 0;
+        for (ResTableTypeSpec spec : typeSpecs) {
+            typeSpecsWritten += spec.write(buffer);
+        }
+        log.debug("typeSpecs写入: {} 字节 (预计={})", typeSpecsWritten, typeSpecsSize);
+        
+        // 8. 写入所有type
+        int typesWritten = 0;
+        for (ResTableType typeChunk : types) {
+            typesWritten += typeChunk.write(buffer);
+        }
+        log.debug("types写入: {} 字节 (预计={})", typesWritten, typesSize);
+        
+        int bytesWritten = buffer.position() - startPos;
+        
+        // 验证大小
+        if (bytesWritten != newChunkSize) {
+            log.warn("完整重建大小不匹配: 预计={}, 实际={}, 差异={}",
+                    newChunkSize, bytesWritten, bytesWritten - newChunkSize);
+        }
+        
+        log.info("完整重建完成: {} 字节", bytesWritten);
+        
+        return bytesWritten;
+    }
+    
+    /**
+     * 计算字符串池大小
+     * 
+     * @param pool 字符串池
+     * @return 字节大小
+     */
+    private int calculateStringPoolSize(ResStringPool pool) {
+        if (pool == null) {
+            return 0;
+        }
+        
+        int headerSize = 28;
+        int offsetsSize = pool.getStringCount() * 4;
+        int stylesOffsetsSize = pool.getStyleCount() * 4;
+        
+        int stringsDataSize = 0;
+        for (int i = 0; i < pool.getStringCount(); i++) {
+            String str = pool.getString(i);
+            stringsDataSize += calculateStringSize(str, pool.isUtf8());
+        }
+        
+        // 4字节对齐
+        int padding = (stringsDataSize % 4 == 0) ? 0 : (4 - stringsDataSize % 4);
+        
+        return headerSize + offsetsSize + stylesOffsetsSize + stringsDataSize + padding;
+    }
+    
+    /**
+     * 计算单个字符串编码后的大小
+     * 
+     * @param str 字符串
+     * @param utf8 是否UTF-8编码
+     * @return 字节大小
+     */
+    private int calculateStringSize(String str, boolean utf8) {
+        if (utf8) {
+            try {
+                byte[] bytes = ModifiedUTF8.encode(str);
+                int byteLen = bytes.length;
+                int utf8CharLen = ModifiedUTF8.countCharacters(bytes);
+                
+                int size = 0;
+                size += (utf8CharLen >= 0x80) ? 2 : 1;  // UTF-8字符数编码
+                size += (byteLen >= 0x80) ? 2 : 1;      // 字节长度编码
+                size += byteLen;                         // 数据
+                size += 1;                               // 终止符
+                return size;
+            } catch (IOException e) {
+                throw new IllegalStateException("MUTF-8编码失败: " + str, e);
+            }
+        } else {
+            // UTF-16
+            int charLen = str.length();
+            
+            int size = 0;
+            size += (charLen >= 0x8000) ? 4 : 2;  // charLen编码
+            size += charLen * 2;                   // 数据（UTF-16）
+            size += 2;                             // 终止符
+            return size;
+        }
+    }
+    
+    /**
+     * 判断是否需要完整重建
+     * 
+     * @return true=需要重建
+     */
+    public boolean needsRebuild() {
+        return typeStringsModified || keyStringsModified;
+    }
+    
+    /**
+     * 计算重建后的package大小
+     * 
+     * @return 字节大小
+     */
+    public int calculateRebuildSize() {
+        if (!needsRebuild()) {
+            return originalSize;
+        }
+        
+        int headerSize = HEADER_SIZE;
+        int typeStringsSize = calculateStringPoolSize(typeStrings);
+        int keyStringsSize = calculateStringPoolSize(keyStrings);
+        int typeSpecsSize = typeSpecs.stream().mapToInt(ResTableTypeSpec::getChunkSize).sum();
+        int typesSize = types.stream().mapToInt(ResTableType::getChunkSize).sum();
+        
+        int totalSize = headerSize + typeStringsSize + keyStringsSize + typeSpecsSize + typesSize;
+        
+        log.debug("计算重建大小: {}", totalSize);
+        
+        return totalSize;
     }
     
     /**

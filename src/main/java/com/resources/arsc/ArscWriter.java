@@ -240,12 +240,20 @@ public class ArscWriter {
     }
     
     /**
-     * 估算包大小（使用原始数据）
+     * 估算包大小（支持重建模式）
      */
     private int estimatePackageSize(ResTablePackage pkg) {
-        // 使用解析时保存的原始大小
-        // 这与writeWithOriginalData()的行为完全匹配
-        return pkg.getOriginalSize();
+        if (pkg.needsRebuild()) {
+            // 重建模式：使用calculateRebuildSize()精确计算
+            int rebuildSize = pkg.calculateRebuildSize();
+            log.debug("Package需要重建: packageId=0x{}, 大小={}", 
+                     Integer.toHexString(pkg.getId()), rebuildSize);
+            return rebuildSize;
+        } else {
+            // 原始模式：使用解析时保存的原始大小
+            // 这与writeWithOriginalData()的行为完全匹配
+            return pkg.getOriginalSize();
+        }
     }
     
     /**

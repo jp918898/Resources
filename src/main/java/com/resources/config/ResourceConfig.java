@@ -40,6 +40,7 @@ public class ResourceConfig {
     private final boolean enableRuntimeValidation;
     private final boolean keepBackup;
     private final boolean parallelProcessing;
+    private final boolean autoSign;  // 自动对齐和签名
     
     private ResourceConfig(Builder builder) {
         this.packageMappings = builder.packageMappings;
@@ -51,6 +52,7 @@ public class ResourceConfig {
         this.enableRuntimeValidation = builder.enableRuntimeValidation;
         this.keepBackup = builder.keepBackup;
         this.parallelProcessing = builder.parallelProcessing;
+        this.autoSign = builder.autoSign;
     }
     
     // Getters
@@ -69,6 +71,7 @@ public class ResourceConfig {
     public boolean isEnableRuntimeValidation() { return enableRuntimeValidation; }
     public boolean isKeepBackup() { return keepBackup; }
     public boolean isParallelProcessing() { return parallelProcessing; }
+    public boolean isAutoSign() { return autoSign; }
     
     /**
      * 从YAML文件加载配置
@@ -169,6 +172,11 @@ public class ResourceConfig {
                     builder.parallelProcessing(parallel);
                 }
                 
+                Boolean autoSign = (Boolean) options.get("auto_sign");
+                if (autoSign != null) {
+                    builder.autoSign(autoSign);
+                }
+                
                 log.debug("选项: {}", options);
             }
             
@@ -229,6 +237,7 @@ public class ResourceConfig {
             options.put("enable_runtime_validation", enableRuntimeValidation);
             options.put("keep_backup", keepBackup);
             options.put("parallel_processing", parallelProcessing);
+            options.put("auto_sign", autoSign);
             data.put("options", options);
             
             // 写入YAML
@@ -273,6 +282,7 @@ public class ResourceConfig {
         builder.enableRuntimeValidation = this.enableRuntimeValidation;
         builder.keepBackup = this.keepBackup;
         builder.parallelProcessing = this.parallelProcessing;
+        builder.autoSign = this.autoSign;
         
         return builder;
     }
@@ -296,6 +306,7 @@ public class ResourceConfig {
         private boolean enableRuntimeValidation = false;
         private boolean keepBackup = true;
         private boolean parallelProcessing = false;
+        private boolean autoSign = true;  // 默认启用（向后兼容）
         
         public Builder addPackageMapping(String oldPkg, String newPkg) {
             packageMappings.addPrefixMapping(oldPkg, newPkg);
@@ -349,6 +360,11 @@ public class ResourceConfig {
         
         public Builder parallelProcessing(boolean value) {
             this.parallelProcessing = value;
+            return this;
+        }
+        
+        public Builder autoSign(boolean value) {
+            this.autoSign = value;
             return this;
         }
         

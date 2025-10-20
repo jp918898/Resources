@@ -70,6 +70,11 @@ public class ResourceCLI implements Callable<Integer> {
                 description = "DEX文件路径（用于交叉验证，可多次指定）")
         private String[] dexPaths;
         
+        @Option(names = {"--auto-sign"}, 
+                negatable = true,
+                description = "启用/禁用自动对齐和签名（默认: --auto-sign）")
+        private Boolean autoSign = null;
+        
         @Option(names = {"-v", "--verbose"}, 
                 description = "详细输出模式")
         private boolean verbose;
@@ -100,19 +105,44 @@ public class ResourceCLI implements Callable<Integer> {
                 System.out.println("加载配置: " + configPath);
                 ResourceConfig config = ResourceConfig.loadFromYaml(configPath);
                 
+                // 处理CLI参数覆盖配置文件
+                boolean needRebuild = false;
+                ResourceConfig.Builder builder = null;
+                
                 // 添加DEX路径（如果指定）- 合并CLI参数和配置文件
                 if (dexPaths != null && dexPaths.length > 0) {
                     System.out.println("合并CLI DEX路径: " + java.util.Arrays.toString(dexPaths));
                     
                     // 创建新的builder基于现有config
-                    ResourceConfig.Builder builder = config.toBuilder();
+                    if (builder == null) {
+                        builder = config.toBuilder();
+                    }
                     
                     // 添加CLI指定的DEX路径（优先级高于配置文件）
                     for (String dexPath : dexPaths) {
                         builder.addDexPath(dexPath);
                     }
                     
-                    // 重新构建config
+                    needRebuild = true;
+                }
+                
+                // 处理autoSign参数（CLI参数优先级高于YAML配置）
+                if (autoSign != null) {
+                    // CLI参数显式指定了autoSign（无论是--auto-sign还是--no-auto-sign）
+                    if (builder == null) {
+                        builder = config.toBuilder();
+                    }
+                    builder.autoSign(autoSign);
+                    if (autoSign) {
+                        System.out.println("✓ 已启用自动对齐和签名（CLI参数）");
+                    } else {
+                        System.out.println("✓ 已禁用自动对齐和签名（CLI参数）");
+                    }
+                    needRebuild = true;
+                }
+                
+                // 重新构建config（如果有修改）
+                if (needRebuild && builder != null) {
                     config = builder.build();
                 }
                 
