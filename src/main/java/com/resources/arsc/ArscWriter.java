@@ -29,11 +29,20 @@ public class ArscWriter {
     // Chunk类型常量
     private static final int RES_TABLE_TYPE = 0x0002;
     
-    // 安全边界百分比（防止大小计算误差）
-    private static final double SAFETY_MARGIN = 0.10; // 10%
+    // 自适应安全边界（防止大小计算误差）
+    // 小文件10%，大文件5%，超大文件2%
+    private static double getSafetyMargin(int calculatedSize) {
+        if (calculatedSize < 1024 * 1024) { // < 1MB
+            return 0.10; // 10%
+        } else if (calculatedSize < 10 * 1024 * 1024) { // < 10MB
+            return 0.05; // 5%
+        } else {
+            return 0.02; // 2%
+        }
+    }
     
-    // 是否启用严格大小验证
-    private boolean strictSizeValidation = true;
+    // ✅ 工业级标准：严格大小验证始终启用，不可关闭
+    // 注意：移除了setStrictSizeValidation()方法，严格验证始终启用
     
     /**
      * 将ArscParser转换为字节数组
@@ -51,12 +60,13 @@ public class ArscWriter {
             // 1. 计算总大小（精确计算）
             int calculatedSize = calculateTotalSize(parser);
             
-            // 2. 添加安全边界（防止大小计算误差）
-            int safetyBytes = (int) (calculatedSize * SAFETY_MARGIN);
+            // 2. 添加自适应安全边界（防止大小计算误差）
+            double safetyMargin = getSafetyMargin(calculatedSize);
+            int safetyBytes = (int) (calculatedSize * safetyMargin);
             int bufferSize = calculatedSize + safetyBytes;
             
-            log.debug("预计总大小: {} 字节, 安全边界: {} 字节, Buffer: {} 字节", 
-                    calculatedSize, safetyBytes, bufferSize);
+            log.debug("预计总大小: {} 字节, 安全边界: {} 字节 ({}%), Buffer: {} 字节", 
+                    calculatedSize, safetyBytes, String.format("%.1f", safetyMargin * 100), bufferSize);
             
             // 3. 创建ByteBuffer（添加边界保护）
             ByteBuffer buffer;
@@ -108,13 +118,17 @@ public class ArscWriter {
                     level, calculatedSize, actualSize, sizeDiff, 
                     (sizeDiff * 100.0 / calculatedSize));
                 
-                if (Math.abs(sizeDiff) > safetyBytes && strictSizeValidation) {
+                if (Math.abs(sizeDiff) > safetyBytes) {
+                    // ✅ 工业级标准：大小差异超限立即失败
                     log.error(msg);
                     throw new IllegalStateException(
-                        "ARSC大小差异超过安全边界，可能存在严重错误。" +
-                        "请检查ResTablePackage和ResStringPool的write()实现");
+                        "ARSC大小差异超过安全边界: 预计=" + calculatedSize + 
+                        ", 实际=" + actualSize + ", 差异=" + sizeDiff + 
+                        ", 安全边界=" + safetyBytes + ". 这表明size计算存在严重错误");
                 } else {
-                    log.warn(msg);
+                    // 轻微差异在安全边界内，记录警告
+                    log.warn("ARSC大小轻微不匹配: 预计={}, 实际={}, 差异={} (在安全边界内)",
+                            calculatedSize, actualSize, sizeDiff);
                 }
             }
             
@@ -141,15 +155,8 @@ public class ArscWriter {
         }
     }
     
-    /**
-     * 设置严格大小验证模式
-     * 
-     * @param strict true=严格模式（大小差异超限时抛异常），false=宽松模式（仅警告）
-     */
-    public void setStrictSizeValidation(boolean strict) {
-        this.strictSizeValidation = strict;
-        log.debug("设置严格大小验证: {}", strict);
-    }
+    // ✅ 工业级标准：移除危险的验证开关API
+    // 严格大小验证始终启用，确保数据完整性
     
     /**
      * 写入ResTable头部

@@ -143,8 +143,12 @@ public class ResourceProcessor {
                     transactionManager.rollback(tx);
                     log.info("回滚成功");
                 } catch (Exception rollbackError) {
-                    log.error("回滚失败", rollbackError);
+                    log.error("事务回滚失败，数据可能处于不一致状态", rollbackError);
                     resultBuilder.addError("回滚失败: " + rollbackError.getMessage());
+                    // ✅ 工业级标准：回滚失败是更严重的错误，必须向上传播
+                    throw new IOException("APK处理失败且回滚失败，数据可能损坏: " + 
+                                         e.getMessage() + " | 回滚错误: " + rollbackError.getMessage(),
+                                         rollbackError);
                 }
             }
             

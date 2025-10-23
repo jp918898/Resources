@@ -222,26 +222,38 @@ public class AxmlWriter extends AxmlVisitor {
                 } else if (v instanceof ResourceReference) {
                     out.putInt(((ResourceReference) v).getValue());
                 } else {
+                    // ✅ 工业级标准：严格类型处理，禁止静默丢失数据
                     if (attr.value instanceof Integer) {
                         out.putInt((Integer) attr.value);
                     } else if (attr.value instanceof String) {
-                        if ("true".equalsIgnoreCase((String) attr.value)) {
+                        String str = (String) attr.value;
+                        if ("true".equalsIgnoreCase(str)) {
                             out.putInt(-1);
-                        } else if ("false".equalsIgnoreCase((String) attr.value)) {
+                        } else if ("false".equalsIgnoreCase(str)) {
                             out.putInt(0);
                         } else {
                             try {
-                                out.putInt(Integer.valueOf((String) attr.value));
-                            } catch (Exception e) {
-                                // 🔧 即使转换失败也必须写入4字节，否则会导致ByteBuffer position不匹配
-                                // 转换失败时写入0
-                                e.printStackTrace();
-                                out.putInt(0);
+                                out.putInt(Integer.valueOf(str));
+                            } catch (NumberFormatException e) {
+                                // ✅ 工业级标准：绝不允许静默丢失数据
+                                throw new IllegalStateException(
+                                    String.format("无法将属性值转换为整数: attr='%s', value='%s', type=0x%02x. " +
+                                                 "这可能表示数据损坏或类型不匹配",
+                                                 attr.name != null ? attr.name.data : "unknown",
+                                                 str, attr.type), e);
                             }
                         }
-                    } else {
-                        // 🔧 对于其他类型的value，也必须写入4字节以保持size一致性
+                    } else if (attr.value == null) {
+                        // null值写入0（TYPE_NULL的标准处理）
                         out.putInt(0);
+                    } else {
+                        // ✅ 工业级标准：未知类型必须报错，不能静默写入0
+                        throw new IllegalStateException(
+                            String.format("不支持的属性值类型: attr='%s', valueClass='%s', value='%s', type=0x%02x",
+                                         attr.name != null ? attr.name.data : "unknown",
+                                         attr.value.getClass().getName(),
+                                         attr.value.toString(),
+                                         attr.type));
                     }
                 }
             }

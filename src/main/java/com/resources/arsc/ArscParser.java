@@ -91,6 +91,13 @@ public class ArscParser {
             
             // 3. 解析所有chunk
             while (buffer.position() < fileSize) {
+                // 防御#1: 检查是否有足够字节读取chunk头部
+                if (buffer.remaining() < 2) {
+                    log.warn("剩余字节不足2，停止解析。位置: {}, 文件大小: {}", 
+                            buffer.position(), fileSize);
+                    break;
+                }
+                
                 int chunkStartPos = buffer.position();
                 
                 // 读取chunk类型（但不移动position）
