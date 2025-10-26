@@ -84,7 +84,10 @@ public class ResourceProcessor {
             
             ResourceScanner.ScanReport scanReport = phase1_Scan(apkPath, config);
             log.info("扫描完成: 发现 {} 处需要修改", scanReport.getTotalResults());
-            resultBuilder.totalFilesScanned(scanReport.getTotalResults());
+            
+            // 修复1：正确统计扫描文件数
+            int totalScannedFiles = scanReport.getAllResults().size() + 1; // XML文件 + ARSC
+            resultBuilder.totalFilesScanned(totalScannedFiles);
             
             // 3. 预验证
             log.info("────────────────────────────────────────");
@@ -109,7 +112,7 @@ public class ResourceProcessor {
             log.info("  Phase 3: 执行替换");
             log.info("────────────────────────────────────────");
             
-            int replaceCount = phase3_Replace(apkPath, config, scanReport);
+            int replaceCount = phase3_Replace(apkPath, config, scanReport, resultBuilder);
             log.info("替换完成: {} 处修改", replaceCount);
             resultBuilder.totalModifications(replaceCount);
             
@@ -118,7 +121,10 @@ public class ResourceProcessor {
             ValidationResult aapt2Validation = new ValidationResult.Builder()
                 .addSkipped(ValidationResult.ValidationLevel.AAPT2_STATIC, "aapt2验证已跳过（混淆APK）")
                 .build();
-            resultBuilder.validationResult(aapt2Validation);
+            
+            // 修复5：合并预验证和最终验证结果
+            ValidationResult combinedValidation = ValidationResult.Builder.merge(preValidation, aapt2Validation);
+            resultBuilder.validationResult(combinedValidation);
             
             log.info("aapt2验证已跳过（混淆APK特殊处理）");
             
@@ -143,8 +149,12 @@ public class ResourceProcessor {
                     transactionManager.rollback(tx);
                     log.info("回滚成功");
                 } catch (Exception rollbackError) {
-                    log.error("回滚失败", rollbackError);
+                    log.error("事务回滚失败，数据可能处于不一致状态", rollbackError);
                     resultBuilder.addError("回滚失败: " + rollbackError.getMessage());
+                    // ✅ 工业级标准：回滚失败是更严重的错误，必须向上传播
+                    throw new IOException("APK处理失败且回滚失败，数据可能损坏: " + 
+                                         e.getMessage() + " | 回滚错误: " + rollbackError.getMessage(),
+                                         rollbackError);
                 }
             }
             
@@ -191,7 +201,8 @@ public class ResourceProcessor {
      * Phase 3: 执行替换
      */
     private int phase3_Replace(String apkPath, ResourceConfig config,
-                              ResourceScanner.ScanReport scanReport) throws IOException {
+                              ResourceScanner.ScanReport scanReport, 
+                              ProcessingResult.Builder resultBuilder) throws IOException {
         
         int totalReplaceCount = 0;
         
@@ -225,14 +236,18 @@ public class ResourceProcessor {
         log.info("VFS加载完成: {} 个文件", fileCount);
         
         // 3. 批量处理AXML文件
-        int axmlCount = processAxmlFilesVfs(vfs, axmlReplacer, filesToProcess);
-        totalReplaceCount += axmlCount;
-        log.info("AXML处理完成: {} 个文件已修改", axmlCount);
+        BatchReplaceResult axmlResult = processAxmlFilesVfs(vfs, axmlReplacer, filesToProcess);
+        totalReplaceCount += axmlResult.getSuccessCount();
+        resultBuilder.addModification("AXML文件", axmlResult.getSuccessCount());
+        log.info("AXML处理完成: {} 个文件已修改", axmlResult.getSuccessCount());
         
         // 4. 处理resources.arsc
-        processArscVfs(vfs, arscReplacer, config);
-        totalReplaceCount += 1;
-        log.info("ARSC处理完成");
+        ArscReplaceResult arscResult = processArscVfs(vfs, arscReplacer, config);
+        totalReplaceCount += arscResult.getTotalModifications();
+        resultBuilder.addModification("ARSC包名", arscResult.getPackageModifications());
+        resultBuilder.addModification("ARSC字符串池", arscResult.getStringPoolModifications());
+        log.info("ARSC处理完成: 包名={}, 字符串池={}", 
+                arscResult.getPackageModifications(), arscResult.getStringPoolModifications());
         
         // 5. 导出APK到临时文件
         String tempApkPath = apkPath + ".tmp";
@@ -274,10 +289,10 @@ public class ResourceProcessor {
      * @param vfs VFS实例
      * @param axmlReplacer AXML替换器
      * @param filesToProcess 需要处理的文件路径集合（来自扫描结果，可为null）
-     * @return 修改的文件数
+     * @return 批量处理结果
      */
-    private int processAxmlFilesVfs(VirtualFileSystem vfs, AxmlReplacer axmlReplacer,
-                                   Set<String> filesToProcess) throws IOException {
+    private BatchReplaceResult processAxmlFilesVfs(VirtualFileSystem vfs, AxmlReplacer axmlReplacer,
+                                                  Set<String> filesToProcess) throws IOException {
         
         VfsResourceProvider provider = new VfsResourceProvider(vfs);
         
@@ -313,18 +328,23 @@ public class ResourceProcessor {
         
         if (allXmls.isEmpty()) {
             log.info("未发现需要处理的XML文件");
-            return 0;
+            return new BatchReplaceResult.Builder()
+                .results(new LinkedHashMap<>())
+                .successCount(0)
+                .skippedCount(0)
+                .errorCount(0)
+                .build();
         }
         
         log.info("发现 {} 个XML文件待处理", allXmls.size());
         
         // 批量处理
-        Map<String, byte[]> modifiedXmls = axmlReplacer.replaceAxmlBatch(allXmls);
+        BatchReplaceResult result = axmlReplacer.replaceAxmlBatch(allXmls);
         
         // 写回VFS
-        provider.updateFiles(modifiedXmls);
+        provider.updateFiles(result.getResults());
         
-        return modifiedXmls.size();
+        return result;
     }
     
     /**
@@ -377,15 +397,24 @@ public class ResourceProcessor {
     
     /**
      * 使用VFS处理resources.arsc
+     * 
+     * @param vfs VFS实例
+     * @param arscReplacer ARSC替换器
+     * @param config 资源配置
+     * @return ARSC替换结果
      */
-    private void processArscVfs(VirtualFileSystem vfs, ArscReplacer arscReplacer, 
-                               ResourceConfig config) throws IOException {
+    private ArscReplaceResult processArscVfs(VirtualFileSystem vfs, ArscReplacer arscReplacer, 
+                                            ResourceConfig config) throws IOException {
         
         VfsResourceProvider provider = new VfsResourceProvider(vfs);
         
         if (!vfs.exists("resources.arsc")) {
             log.warn("未找到resources.arsc");
-            return;
+            return new ArscReplaceResult.Builder()
+                .packageModifications(0)
+                .stringPoolModifications(0)
+                .arscModified(false)
+                .build();
         }
         
         try {
@@ -395,7 +424,9 @@ public class ResourceProcessor {
             ArscParser parser = new ArscParser();
             parser.parse(arscData);
             
-            // 跟踪是否有修改
+            // 跟踪修改统计
+            int packageModifications = 0;
+            int stringPoolModifications = 0;
             boolean arscModified = false;
             
             // 替换包名
@@ -407,19 +438,19 @@ public class ResourceProcessor {
                 if (!oldPkg.equals(newPkg)) {
                     arscReplacer.replacePackageName(mainPackage, newPkg);
                     log.info("ARSC包名替换: '{}' -> '{}'", oldPkg, newPkg);
+                    packageModifications = 1;
                     arscModified = true;
                 }
             }
             
             // 替换字符串池
-            int stringPoolReplaceCount = 0;
             if (parser.getGlobalStringPool() != null) {
                 Map<String, String> stringReplacements = buildStringReplacements(config);
-                stringPoolReplaceCount = arscReplacer.replaceStringPool(
+                stringPoolModifications = arscReplacer.replaceStringPool(
                     parser.getGlobalStringPool(), stringReplacements);
                 
-                log.info("ARSC字符串池替换: {} 处", stringPoolReplaceCount);
-                if (stringPoolReplaceCount > 0) {
+                log.info("ARSC字符串池替换: {} 处", stringPoolModifications);
+                if (stringPoolModifications > 0) {
                     arscModified = true;
                 }
             }
@@ -433,6 +464,12 @@ public class ResourceProcessor {
             } else {
                 log.info("resources.arsc无需修改，保持原始数据");
             }
+            
+            return new ArscReplaceResult.Builder()
+                .packageModifications(packageModifications)
+                .stringPoolModifications(stringPoolModifications)
+                .arscModified(arscModified)
+                .build();
             
         } catch (Exception e) {
             log.error("处理resources.arsc失败", e);

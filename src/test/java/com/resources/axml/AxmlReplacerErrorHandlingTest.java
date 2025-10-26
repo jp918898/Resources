@@ -1,5 +1,6 @@
 package com.resources.axml;
 
+import com.resources.model.BatchReplaceResult;
 import com.resources.model.ClassMapping;
 import com.resources.model.PackageMapping;
 import com.resources.validator.SemanticValidator;
@@ -56,15 +57,18 @@ class AxmlReplacerErrorHandlingTest {
         
         // 部分失败不应该抛异常
         assertDoesNotThrow(() -> {
-            Map<String, byte[]> results = axmlReplacer.replaceAxmlBatch(files);
+            BatchReplaceResult result = axmlReplacer.replaceAxmlBatch(files);
             
             // 验证所有文件都有结果
-            assertEquals(3, results.size(), "应该返回所有文件的结果");
+            assertEquals(3, result.getResults().size(), "应该返回所有文件的结果");
             
             // 验证失败的文件保留了原数据
             assertArrayEquals(files.get("res/layout/corrupted.xml"), 
-                            results.get("res/layout/corrupted.xml"),
+                            result.getResults().get("res/layout/corrupted.xml"),
                             "损坏文件应该保留原数据");
+            
+            // 验证统计信息
+            assertTrue(result.getTotalProcessed() > 0, "应该有处理过的文件");
         });
     }
     
@@ -80,13 +84,16 @@ class AxmlReplacerErrorHandlingTest {
         // 由于AxmlParser的优雅错误处理，这些文件会被标记为skipped而非failed
         // 因此不应该抛异常（验证系统的鲁棒性）
         assertDoesNotThrow(() -> {
-            Map<String, byte[]> results = axmlReplacer.replaceAxmlBatch(files);
+            BatchReplaceResult result = axmlReplacer.replaceAxmlBatch(files);
             
             // 应该返回原数据
-            assertEquals(2, results.size());
+            assertEquals(2, result.getResults().size());
             assertArrayEquals(files.get("res/layout/corrupted1.xml"), 
-                            results.get("res/layout/corrupted1.xml"),
+                            result.getResults().get("res/layout/corrupted1.xml"),
                             "损坏文件应该保留原数据");
+            
+            // 验证统计信息
+            assertEquals(2, result.getTotalProcessed(), "应该处理了2个文件");
         });
     }
     
@@ -107,8 +114,11 @@ class AxmlReplacerErrorHandlingTest {
         
         // 混合场景不应该抛异常
         assertDoesNotThrow(() -> {
-            Map<String, byte[]> results = axmlReplacer.replaceAxmlBatch(files);
-            assertEquals(3, results.size(), "应该处理所有文件");
+            BatchReplaceResult result = axmlReplacer.replaceAxmlBatch(files);
+            assertEquals(3, result.getResults().size(), "应该处理所有文件");
+            
+            // 验证统计信息
+            assertEquals(3, result.getTotalProcessed(), "应该处理了3个文件");
         });
     }
     
@@ -122,8 +132,12 @@ class AxmlReplacerErrorHandlingTest {
         
         // 全部跳过不应该抛异常
         assertDoesNotThrow(() -> {
-            Map<String, byte[]> results = axmlReplacer.replaceAxmlBatch(files);
-            assertEquals(2, results.size(), "应该返回所有文件");
+            BatchReplaceResult result = axmlReplacer.replaceAxmlBatch(files);
+            assertEquals(2, result.getResults().size(), "应该返回所有文件");
+            
+            // 验证统计信息
+            assertEquals(2, result.getTotalProcessed(), "应该处理了2个文件");
+            assertEquals(2, result.getSkippedCount(), "应该跳过了2个文件");
         });
     }
     
@@ -133,8 +147,9 @@ class AxmlReplacerErrorHandlingTest {
         
         // 空输入不应该抛异常
         assertDoesNotThrow(() -> {
-            Map<String, byte[]> results = axmlReplacer.replaceAxmlBatch(files);
-            assertTrue(results.isEmpty(), "结果应该为空");
+            BatchReplaceResult result = axmlReplacer.replaceAxmlBatch(files);
+            assertTrue(result.getResults().isEmpty(), "结果应该为空");
+            assertEquals(0, result.getTotalProcessed(), "应该没有处理任何文件");
         });
     }
     

@@ -150,17 +150,15 @@ public class AxmlParser implements ResConst {
             
         // 5. TYPE_FLOAT (0x04) - 浮点数
         case com.resources.util.TypedValue.TYPE_FLOAT:
-            return Float.intBitsToFloat(v);
-            
         // 6. TYPE_DIMENSION (0x05) - 尺寸值 (如 16dp, 24sp)
         case com.resources.util.TypedValue.TYPE_DIMENSION:
-            // 返回复杂数据，调用者可通过TypedValue.complexToFloat()和getComplexUnit()解析
-            return v;  // 复杂数据，保持原始值
-            
         // 7. TYPE_FRACTION (0x06) - 百分比 (如 50%, 75%p)
         case com.resources.util.TypedValue.TYPE_FRACTION:
-            // 返回复杂数据，调用者可通过TypedValue.complexToFraction()解析
-            return v;  // 复杂数据，保持原始值
+            // 🔧 保持原始值，不做任何转换
+            // 这些类型在AXML中都是32位整数编码，直接返回原始值
+            // 确保写入时数据完全一致，避免精度损失和类型转换错误
+            // 调用者如需可读格式，可通过TypedValue.complexToFloat()等方法转换
+            return v;
             
         // 8. TYPE_DYNAMIC_REFERENCE (0x07) - 动态资源引用
         case com.resources.util.TypedValue.TYPE_DYNAMIC_REFERENCE:

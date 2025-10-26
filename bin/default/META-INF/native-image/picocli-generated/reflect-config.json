@@ -14,6 +14,7 @@
     "allPublicMethods" : true,
     "fields" : [
       { "name" : "apkPath" },
+      { "name" : "autoSign" },
       { "name" : "configPath" },
       { "name" : "dexPaths" },
       { "name" : "outputPath" },
@@ -44,6 +45,13 @@
       { "name" : "dexPaths" },
       { "name" : "verbose" }
     ]
+  },
+  {
+    "name" : "java.lang.Boolean",
+    "allDeclaredConstructors" : true,
+    "allPublicConstructors" : true,
+    "allDeclaredMethods" : true,
+    "allPublicMethods" : true
   },
   {
     "name" : "picocli.CommandLine$AutoHelpMixin",

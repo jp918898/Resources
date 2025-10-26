@@ -91,6 +91,8 @@ application {
 
 // Fat JAR配置 - 包含所有依赖
 task fatJar(type: Jar) {
+    group = 'build'
+    description = 'Creates a fat JAR with all dependencies'
     archiveClassifier = 'all'
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     
@@ -104,6 +106,9 @@ task fatJar(type: Jar) {
     
     with jar
 }
+
+// 确保fatJar任务被包含在assemble任务中
+assemble.dependsOn fatJar
 
 // 测试配置
 test {

@@ -172,6 +172,31 @@ public class ValidationResult {
         public ValidationResult build() {
             return new ValidationResult(items);
         }
+        
+        /**
+         * 合并两个验证结果
+         * 
+         * @param result1 第一个验证结果
+         * @param result2 第二个验证结果
+         * @return 合并后的验证结果
+         */
+        public static ValidationResult merge(ValidationResult result1, ValidationResult result2) {
+            if (result1 == null && result2 == null) {
+                return new ValidationResult(new ArrayList<>());
+            }
+            if (result1 == null) {
+                return result2;
+            }
+            if (result2 == null) {
+                return result1;
+            }
+            
+            List<ValidationItem> mergedItems = new ArrayList<>();
+            mergedItems.addAll(result1.getItems());
+            mergedItems.addAll(result2.getItems());
+            
+            return new ValidationResult(mergedItems);
+        }
     }
 }
 

@@ -1,5 +1,6 @@
 package com.resources.axml;
 
+import com.resources.model.BatchReplaceResult;
 import com.resources.model.ClassMapping;
 import com.resources.model.PackageMapping;
 import com.resources.util.AxmlValidator;
@@ -190,10 +191,10 @@ public class AxmlReplacer {
      * 批量处理AXML文件
      * 
      * @param files 文件路径到数据的映射
-     * @return 文件路径到修改后数据的映射
+     * @return 批量处理结果（包含统计信息和结果数据）
      * @throws IOException 处理失败
      */
-    public Map<String, byte[]> replaceAxmlBatch(Map<String, byte[]> files) throws IOException {
+    public BatchReplaceResult replaceAxmlBatch(Map<String, byte[]> files) throws IOException {
         Objects.requireNonNull(files, "files不能为null");
         
         log.info("批量处理AXML: {} 个文件", files.size());
@@ -202,6 +203,7 @@ public class AxmlReplacer {
         int successCount = 0;
         int skippedCount = 0;
         int errorCount = 0;
+        List<String> errorFiles = new ArrayList<>();
         
         for (Map.Entry<String, byte[]> entry : files.entrySet()) {
             String filePath = entry.getKey();
@@ -221,6 +223,7 @@ public class AxmlReplacer {
             } catch (Exception e) {
                 log.error("处理文件失败: {}", filePath, e);
                 errorCount++;
+                errorFiles.add(filePath);
                 
                 // 失败时保留原始数据（宽松模式）
                 results.put(filePath, xmlData);
@@ -237,7 +240,13 @@ public class AxmlReplacer {
         }
         // 部分失败时不抛异常，只记录警告（已在catch块中log.error）
         
-        return results;
+        return new BatchReplaceResult.Builder()
+            .results(results)
+            .successCount(successCount)
+            .skippedCount(skippedCount)
+            .errorCount(errorCount)
+            .errorFiles(errorFiles)
+            .build();
     }
     
     /**

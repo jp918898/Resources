@@ -138,13 +138,9 @@ class DexUtilsTest {
     
     @Test
     @DisplayName("loadDexClasses - 真实DEX文件（如果存在）")
+    @org.junit.jupiter.api.condition.EnabledIf("isDexFileAvailable")
     void testLoadDexClasses_RealDexFile() throws IOException {
         String dexPath = "input/dex/classes.dex";
-        
-        if (!DexUtils.isDexFileAccessible(dexPath)) {
-            System.out.println("跳过测试: DEX文件不存在 " + dexPath);
-            return;
-        }
         
         Set<String> classes = DexUtils.loadDexClasses(dexPath);
         
@@ -153,15 +149,28 @@ class DexUtilsTest {
         
         System.out.println("加载DEX成功: " + classes.size() + " 个类");
         
-        // 验证类名格式
+        // 验证类名格式（修正正则表达式，移除短横线）
         for (String className : classes) {
             assertNotNull(className);
             assertFalse(className.isEmpty());
             // Java类名格式验证（支持package-info等特殊类）
-            // 合法格式：字母/下划线/美元符开头，后跟字母/数字/下划线/美元符/点号/短横线
-            assertTrue(className.matches("[a-zA-Z_$][a-zA-Z0-9_$.\\-]*"),
+            // 合法格式：字母/下划线/美元符开头，后跟字母/数字/下划线/美元符/点号
+            // 注意：Java类名不允许短横线，只允许在包名中使用
+            assertTrue(className.matches("[a-zA-Z_$][a-zA-Z0-9_$.]*"),
                       "无效的类名格式: " + className);
         }
+    }
+    
+    /**
+     * 检查DEX文件是否可用的条件方法
+     */
+    static boolean isDexFileAvailable() {
+        String dexPath = "input/dex/classes.dex";
+        boolean available = DexUtils.isDexFileAccessible(dexPath);
+        if (!available) {
+            System.out.println("跳过测试: DEX文件不存在 " + dexPath);
+        }
+        return available;
     }
     
     @Test

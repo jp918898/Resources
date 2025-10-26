@@ -124,10 +124,13 @@ public class ArscParserTest {
     void testNullParameters() {
         ArscParser parser = new ArscParser();
         
+        // 测试null参数
         assertThrows(NullPointerException.class, () -> parser.parse(null));
         
-        assertDoesNotThrow(() -> parser.parse(realArscData != null ? realArscData : new byte[0]));
+        // 测试空数据 - 应该抛出IllegalArgumentException
+        assertThrows(IllegalArgumentException.class, () -> parser.parse(new byte[0]));
         
+        // 测试其他null参数
         assertThrows(NullPointerException.class, () -> parser.findStringIndices(null));
         assertThrows(NullPointerException.class, () -> parser.findStringsByPrefix(null));
         assertThrows(NullPointerException.class, () -> parser.getPackageByName(null));

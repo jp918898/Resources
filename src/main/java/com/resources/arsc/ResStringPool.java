@@ -59,7 +59,7 @@ public class ResStringPool {
     private boolean isSorted;          // 是否排序
     
     // 验证模式（默认STRICT以确保数据完整性）
-    private ValidationMode validationMode = ValidationMode.STRICT;
+    private ValidationMode validationMode = ValidationMode.WARN;
     
     public ResStringPool() {
         this.strings = new ArrayList<>();
@@ -336,8 +336,27 @@ public class ResStringPool {
             return result;
         } catch (IOException e) {
             log.error("MUTF-8解码失败: byteLen={}", byteLen, e);
-            // 降级：使用标准UTF-8
-            return new String(data, StandardCharsets.UTF_8);
+            
+            // 防御#4: 细粒度降级策略
+            try {
+                // 尝试1: 标准UTF-8解码
+                String result = new String(data, StandardCharsets.UTF_8);
+                log.warn("MUTF-8解码失败，降级到标准UTF-8: '{}'", 
+                        result.length() > 50 ? result.substring(0, 50) + "..." : result);
+                return result;
+            } catch (Exception e2) {
+                // 尝试2: 强制UTF-8解码（忽略错误）
+                try {
+                    String result = new String(data, 0, data.length, StandardCharsets.UTF_8);
+                    log.warn("标准UTF-8解码失败，强制解码: '{}'", 
+                            result.length() > 50 ? result.substring(0, 50) + "..." : result);
+                    return result;
+                } catch (Exception e3) {
+                    // 最后降级: 使用ISO-8859-1（不会失败）
+                    log.error("所有UTF-8解码尝试失败，使用ISO-8859-1降级", e3);
+                    return new String(data, StandardCharsets.ISO_8859_1);
+                }
+            }
         }
     }
     

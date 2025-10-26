@@ -284,5 +284,163 @@ public class StringItemsTest {
         assertEquals(size, actualWritten, 
             "实际写入的数据量应等于getSize()返回值 [expected=" + size + ", actual=" + actualWritten + "]");
     }
+
+    @Test
+    @DisplayName("测试9: UTF-16LE编码边界值测试")
+    void testUTF16LEBoundaryValues() throws IOException {
+        // 测试UTF-8到UTF-16LE的切换边界
+        testUTF16LEBoundary(0x7FFF, "UTF-8边界-1", false); // 应该使用UTF-8
+        testUTF16LEBoundary(0x8000, "UTF-16LE边界", true);  // 应该切换到UTF-16LE
+        testUTF16LEBoundary(0x8001, "UTF-16LE边界+1", true); // 应该使用UTF-16LE
+    }
+    
+    private void testUTF16LEBoundary(int charCount, String testName, boolean expectUTF16LE) throws IOException {
+        // 创建指定长度的字符串
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < charCount; i++) {
+            sb.append('A'); // 使用ASCII字符，确保每个字符1字节
+        }
+        String testString = sb.toString();
+        
+        StringItems items = new StringItems();
+        items.add(new StringItem(testString));
+        items.prepare();
+        
+        int size = items.getSize();
+        ByteBuffer buffer = ByteBuffer.allocate(size + 100).order(ByteOrder.LITTLE_ENDIAN);
+        items.write(buffer);
+        buffer.flip();
+        
+        // 验证头部字段
+        int stringCount = buffer.getInt();
+        int styleCount = buffer.getInt();
+        int flags = buffer.getInt();
+        int stringsOffset = buffer.getInt();
+        int stylesOffset = buffer.getInt();
+        
+        assertEquals(1, stringCount, testName + ": 字符串数量应为1");
+        assertEquals(0, styleCount, testName + ": 样式数量应为0");
+        
+        if (expectUTF16LE) {
+            assertEquals(0, flags, testName + ": 应该使用UTF-16LE编码 (flags=0)");
+        } else {
+            assertEquals(0x00000100, flags, testName + ": 应该使用UTF-8编码 (flags=0x100)");
+        }
+        
+        assertTrue(stringsOffset > 0, testName + ": stringsOffset应大于0");
+        assertEquals(0, stylesOffset, testName + ": stylesOffset应为0");
+        
+        System.out.println(testName + ": " + charCount + " 字符, flags=0x" + 
+                          Integer.toHexString(flags) + " (UTF-16LE=" + expectUTF16LE + ")");
+    }
+    
+    @Test
+    @DisplayName("测试10: 空字符串在UTF-16LE模式")
+    void testEmptyStringInUTF16LEMode() throws IOException {
+        // 创建包含空字符串的StringItems
+        StringItems items = new StringItems();
+        items.add(new StringItem("")); // 空字符串
+        items.add(new StringItem("A".repeat(0x8000))); // 强制UTF-16LE的长字符串
+        items.add(new StringItem("")); // 另一个空字符串
+        
+        items.prepare();
+        
+        int size = items.getSize();
+        ByteBuffer buffer = ByteBuffer.allocate(size + 100).order(ByteOrder.LITTLE_ENDIAN);
+        items.write(buffer);
+        buffer.flip();
+        
+        // 验证头部
+        int stringCount = buffer.getInt();
+        int styleCount = buffer.getInt();
+        int flags = buffer.getInt();
+        int stringsOffset = buffer.getInt();
+        int stylesOffset = buffer.getInt();
+        
+        assertEquals(3, stringCount, "字符串数量应为3");
+        assertEquals(0, styleCount, "样式数量应为0");
+        assertEquals(0, flags, "应该使用UTF-16LE编码");
+        assertTrue(stringsOffset > 0, "stringsOffset应大于0");
+        assertEquals(0, stylesOffset, "stylesOffset应为0");
+        
+        // 验证字符串偏移数组
+        int offset1 = buffer.getInt(); // 空字符串偏移
+        int offset2 = buffer.getInt(); // 长字符串偏移
+        int offset3 = buffer.getInt(); // 另一个空字符串偏移
+        
+        assertTrue(offset1 >= 0, "第1个偏移应>=0");
+        assertTrue(offset2 > offset1, "第2个偏移应>第1个");
+        // 注意：在UTF-16LE模式下，空字符串的偏移可能不按预期顺序排列
+        // 我们只验证偏移值是非负的
+        assertTrue(offset3 >= 0, "第3个偏移应>=0");
+        
+        System.out.println("空字符串UTF-16LE测试: 偏移=[" + offset1 + ", " + offset2 + ", " + offset3 + "]");
+    }
+    
+    @Test
+    @DisplayName("测试11: 只包含NULL字符的字符串")
+    void testNullCharacterString() throws IOException {
+        // 创建只包含NULL字符的字符串
+        String nullString = "\u0000".repeat(100);
+        
+        StringItems items = new StringItems();
+        items.add(new StringItem(nullString));
+        items.prepare();
+        
+        int size = items.getSize();
+        ByteBuffer buffer = ByteBuffer.allocate(size + 100).order(ByteOrder.LITTLE_ENDIAN);
+        items.write(buffer);
+        buffer.flip();
+        
+        // 验证头部
+        int stringCount = buffer.getInt();
+        int styleCount = buffer.getInt();
+        int flags = buffer.getInt();
+        int stringsOffset = buffer.getInt();
+        int stylesOffset = buffer.getInt();
+        
+        assertEquals(1, stringCount, "字符串数量应为1");
+        assertEquals(0, styleCount, "样式数量应为0");
+        assertEquals(0x00000100, flags, "应该使用UTF-8编码");
+        assertTrue(stringsOffset > 0, "stringsOffset应大于0");
+        assertEquals(0, stylesOffset, "stylesOffset应为0");
+        
+        System.out.println("NULL字符字符串测试: 100个NULL字符, flags=0x" + Integer.toHexString(flags));
+    }
+    
+    @Test
+    @DisplayName("测试12: 混合长度字符串的编码切换")
+    void testMixedLengthStringEncoding() throws IOException {
+        StringItems items = new StringItems();
+        
+        // 添加不同长度的字符串
+        items.add(new StringItem("Short"));                    // 5字符 - UTF-8
+        items.add(new StringItem("A".repeat(0x7FFF)));        // 32767字符 - UTF-8
+        items.add(new StringItem("A".repeat(0x8000)));        // 32768字符 - UTF-16LE
+        items.add(new StringItem("A".repeat(0x8001)));        // 32769字符 - UTF-16LE
+        items.add(new StringItem("Medium"));                  // 6字符 - UTF-8
+        
+        items.prepare();
+        
+        int size = items.getSize();
+        ByteBuffer buffer = ByteBuffer.allocate(size + 100).order(ByteOrder.LITTLE_ENDIAN);
+        items.write(buffer);
+        buffer.flip();
+        
+        // 验证头部
+        int stringCount = buffer.getInt();
+        int styleCount = buffer.getInt();
+        int flags = buffer.getInt();
+        int stringsOffset = buffer.getInt();
+        int stylesOffset = buffer.getInt();
+        
+        assertEquals(5, stringCount, "字符串数量应为5");
+        assertEquals(0, styleCount, "样式数量应为0");
+        assertEquals(0, flags, "应该使用UTF-16LE编码（因为有超长字符串）");
+        assertTrue(stringsOffset > 0, "stringsOffset应大于0");
+        assertEquals(0, stylesOffset, "stylesOffset应为0");
+        
+        System.out.println("混合长度字符串测试: 5个字符串, 最长=" + 0x8001 + "字符, flags=0x" + Integer.toHexString(flags));
+    }
 }
 

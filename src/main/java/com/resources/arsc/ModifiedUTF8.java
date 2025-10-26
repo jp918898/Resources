@@ -2,6 +2,8 @@ package com.resources.arsc;
 
 import java.io.IOException;
 import java.io.UTFDataFormatException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Modified UTF-8 (MUTF-8) 编解码工具
@@ -17,6 +19,8 @@ import java.io.UTFDataFormatException;
  * @version 1.0.0
  */
 public class ModifiedUTF8 {
+    
+    private static final Logger log = LoggerFactory.getLogger(ModifiedUTF8.class);
     
     /**
      * 将字符串编码为 MUTF-8 字节数组
@@ -101,10 +105,14 @@ public class ModifiedUTF8 {
                     bytes[index++] = (byte) (0x80 | ((c >> 6) & 0x3F));
                     bytes[index++] = (byte) (0x80 | (c & 0x3F));
                 } else {
-                    // 孤立的高代理（无效），按3字节编码
-                    bytes[index++] = (byte) (0xE0 | ((c >> 12) & 0x0F));
-                    bytes[index++] = (byte) (0x80 | ((c >> 6) & 0x3F));
-                    bytes[index++] = (byte) (0x80 | (c & 0x3F));
+                    // 孤立的高代理（无效），替换为U+FFFD
+                    // 防御#2: 孤立代理字符处理 - 与Android运行时行为一致
+                    log.warn("发现孤立的高代理字符U+{}，替换为U+FFFD", 
+                            Integer.toHexString(c).toUpperCase());
+                    c = 0xFFFD; // 替换字符
+                    bytes[index++] = (byte) (0xEF);
+                    bytes[index++] = (byte) (0xBF);
+                    bytes[index++] = (byte) (0xBD);
                 }
             } else {
                 // 3字节: 1110xxxx 10xxxxxx 10xxxxxx（BMP字符）
@@ -191,6 +199,24 @@ public class ModifiedUTF8 {
                 throw new UTFDataFormatException(
                     String.format("MUTF-8格式错误: 无效的起始字节 0x%02X at position %d", 
                                  b1, byteIndex - 1));
+            }
+        }
+        
+        // 防御#3: 验证孤立代理字符
+        for (int i = 0; i < charCount; i++) {
+            char c = chars[i];
+            if (Character.isHighSurrogate(c)) {
+                if (i + 1 >= charCount || !Character.isLowSurrogate(chars[i + 1])) {
+                    log.warn("发现孤立的高代理字符U+{}，替换为U+FFFD", 
+                            Integer.toHexString(c).toUpperCase());
+                    chars[i] = 0xFFFD; // 替换字符
+                }
+            } else if (Character.isLowSurrogate(c)) {
+                if (i == 0 || !Character.isHighSurrogate(chars[i - 1])) {
+                    log.warn("发现孤立的低代理字符U+{}，替换为U+FFFD", 
+                            Integer.toHexString(c).toUpperCase());
+                    chars[i] = 0xFFFD; // 替换字符
+                }
             }
         }
         

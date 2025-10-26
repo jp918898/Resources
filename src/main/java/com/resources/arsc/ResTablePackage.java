@@ -409,10 +409,14 @@ public class ResTablePackage {
         
         int bytesWritten = buffer.position() - startPos;
         
-        // 验证大小
+        // ✅ 工业级标准：Size不匹配立即失败，符合Fail-Fast原则
         if (bytesWritten != newChunkSize) {
-            log.warn("完整重建大小不匹配: 预计={}, 实际={}, 差异={}",
-                    newChunkSize, bytesWritten, bytesWritten - newChunkSize);
+            String msg = String.format(
+                "Package重建size严重不匹配: 预计=%d, 实际=%d, 差异=%d. " +
+                "这表明StringPool或TypeSpec/Type的size计算不准确，必须立即修复",
+                newChunkSize, bytesWritten, bytesWritten - newChunkSize);
+            log.error(msg);
+            throw new IllegalStateException(msg);
         }
         
         log.info("完整重建完成: {} 字节", bytesWritten);
